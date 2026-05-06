@@ -53,6 +53,29 @@ __pycache__/
 *.fdb_latexmk
 *.fls
 *.out
+*.spl
 *.synctex.gz
 *.synctex(busy)
 *.xdv
+
+# Training artifacts kept locally but not versioned
+data/train/stats.json
+data/train/train_history.json
+data/train/train_summary.json
+模型-new2/checkpoints/backup_*/
+模型-new2/checkpoints/train_history.json
+模型-new2/checkpoints/train_summary.json
+模型-new2/smoke_checkpoints/
+模型-new2/smoke_checkpoints_multi/
+
+# Paper previews, duplicate PDFs, and template exports
+paper/tex-bib/*.pdf
+paper/tex-bib/*.spl
+paper/仪器与测量汇刊/New_IEEEtran_how-to.pdf
+paper/仪器与测量汇刊/bare_jrnl_new_sample4.pdf
+paper/仪器与测量汇刊/new/tim_stage1_dual_state_cn.pdf
+paper/仪器与测量汇刊/new2/*main*.pdf
+paper/仪器与测量汇刊/new2/page_preview-*.png
+paper/仪器与测量汇刊/new2/rewritten_main_v2_page*.png
+paper/仪器与测量汇刊/new2/picture/main.pdf
+paper/仪器与测量汇刊/new2/模板-IEEE 控制系统技术汇刊 (TCST)/*.pdf
