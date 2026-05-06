@@ -1,0 +1,72 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 16,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw-base",
+      "hidden": true,
+      "generator": "MinGW Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "environment": {
+        "PATH": "C:/Qt/Tools/mingw1310_64/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "C:/Qt/Tools/mingw1310_64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe",
+        "USE_SYSTEM_OPENCV": "OFF",
+        "USE_SYSTEM_YAML_CPP": "OFF",
+        "USE_SYSTEM_EIGEN3": "OFF"
+      }
+    },
+    {
+      "name": "mingw-release",
+      "inherits": "mingw-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "mingw-debug",
+      "inherits": "mingw-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "msvc-opencv-release",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "USE_SYSTEM_OPENCV": "ON",
+        "USE_ONNXRUNTIME": "ON",
+        "USE_SYSTEM_YAML_CPP": "OFF",
+        "USE_SYSTEM_EIGEN3": "OFF",
+        "OpenCV_DIR": "C:/Users/Administrator/miniconda3/envs/py310/Library/cmake/x64/vc17/lib",
+        "ONNXRUNTIME_ROOT": "${sourceDir}/third_party/onnxruntime-win-x64-1.23.2"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mingw-release",
+      "configurePreset": "mingw-release",
+      "inheritConfigureEnvironment": true
+    },
+    {
+      "name": "mingw-debug",
+      "configurePreset": "mingw-debug",
+      "inheritConfigureEnvironment": true
+    },
+    {
+      "name": "msvc-opencv-release",
+      "configurePreset": "msvc-opencv-release",
+      "configuration": "Release"
+    }
+  ]
+}

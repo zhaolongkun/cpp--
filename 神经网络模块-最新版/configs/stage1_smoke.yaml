@@ -1,0 +1,28 @@
+model:
+  name: dual_state
+  input_dim: 25
+  stem_dim: 32
+  state_dim: 32
+  dropout: 0.10
+  future_head: false
+  velocity_head: true
+
+train:
+  epochs: 3
+  batch_size: 8
+  lr: 0.001
+  weight_decay: 0.00001
+  seed: 42
+  device: cpu
+
+loss:
+  clean_weight: 1.0
+  future_weight: 0.0
+  velocity_weight: 0.05
+  smooth_weight: 0.05
+  turn_weight: 0.10
+  lag_weight: 0.10
+
+paths:
+  dataset_npz: D:/kun-data/kun-code-data/反无/cpp智能控制/神经网络模块-最新版/data/smoke/stage1_clean_dataset.npz
+  out_dir: D:/kun-data/kun-code-data/反无/cpp智能控制/神经网络模块-最新版/outputs/smoke_stage1

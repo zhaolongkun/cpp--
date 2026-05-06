@@ -1,0 +1,107 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="fw1" name="端到端预测框架">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="700" background="#FFFFFF" math="1" shadow="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="t0" value="旧控制链生成与端到端一帧超前控制信号预测框架" style="text;strokeColor=none;fillColor=none;html=1;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="100" y="18" width="1600" height="34" as="geometry"/>
+        </mxCell>
+
+        <!-- ① 目标检测 -->
+        <mxCell id="det" value="目标检测&lt;div&gt;检测框中心&lt;/div&gt;&lt;div&gt;c(t)=[x_c, y_c]&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="30" y="310" width="130" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- ② 卡尔曼滤波 -->
+        <mxCell id="kalman" value="卡尔曼滤波&lt;div&gt;对检测框坐标滤波&lt;/div&gt;&lt;div&gt;→ ĉ(t), v̂(t)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="200" y="310" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="det" target="kalman">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ③ 减摄像头中心 -->
+        <mxCell id="sub" value="减摄像头中心&lt;div&gt;e_f(t) = ĉ(t) − c_cam&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="390" y="310" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="kalman" target="sub">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ④ Step Clamp -->
+        <mxCell id="clamp" value="阶跃限幅&lt;div&gt;step clamp&lt;/div&gt;&lt;div&gt;→ ẽ(t)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="580" y="310" width="130" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="sub" target="clamp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ⑤ 低通滤波 -->
+        <mxCell id="lpf" value="低通滤波 (LPF)&lt;div&gt;u_legacy(t)&lt;/div&gt;&lt;div&gt;[first_filter_dx/dy]&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="750" y="310" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a4" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="clamp" target="lpf">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 旧控制链括号标注 -->
+        <mxCell id="lbl_old" value="旧控制链（含约一帧视觉处理时延）" style="text;strokeColor=#b85450;fillColor=none;html=1;fontSize=9;fontColor=#b85450;fontStyle=2;align=center;" vertex="1" parent="1">
+          <mxGeometry x="200" y="395" width="700" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ⑥ 特征构造 -->
+        <mxCell id="feat" value="特征构造 (T=16帧)&lt;div&gt;X流: [fx, Δfx, Δ²fx]&lt;/div&gt;&lt;div&gt;Y流: [fy, Δfy, Δ²fy]&lt;/div&gt;&lt;div&gt;质量: [conf, logA, miss, dt]&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="750" y="160" width="160" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="a5" value="历史序列" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="lpf" target="feat">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ⑦ DSCGNet -->
+        <mxCell id="net" value="DSCGNet&lt;div&gt;双流因果编码 + 质量分支&lt;/div&gt;&lt;div&gt;Δ-head (z_t) + Gate-head (g_t)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#555555;fontStyle=1;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="960" y="185" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a6" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="feat" target="net">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ⑧ 状态转移 -->
+        <mxCell id="trans" value="状态转移参数化输出&lt;div&gt;Δû = g_t ⊙ (r_max ⊙ tanh(z_t))&lt;/div&gt;&lt;div&gt;û_{t+1} = u_legacy(t) + Δû&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0cee2;strokeColor=#56517e;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="185" width="210" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a7" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="net" target="trans">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <!-- u_legacy → 状态转移 -->
+        <mxCell id="a8" value="u_legacy(t)" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#b85450;fontColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="lpf" target="trans">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ⑨ 输出 -->
+        <mxCell id="out" value="预测输出 û_{t+1}&lt;div&gt;(pred_ux, pred_uy)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1490" y="195" width="150" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="a9" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="trans" target="out">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ⑩ 电机 -->
+        <mxCell id="motor" value="电机控制链&lt;div&gt;云台驱动&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1510" y="310" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="a10" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="out" target="motor">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 时延标注 -->
+        <mxCell id="dn" value="⚠ 约一帧视觉处理时延" style="text;strokeColor=#d6b656;fillColor=#fff2cc;html=1;fontSize=8;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="260" width="150" height="26" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

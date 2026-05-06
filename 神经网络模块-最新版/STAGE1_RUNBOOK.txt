@@ -1,0 +1,47 @@
+﻿STAGE1 EXECUTION ORDER
+======================
+
+0. Goal
+Prove current clean offset reconstruction beats traditional baselines.
+Do not open future head before stage1 passes.
+
+1. Collect logs
+Set-Location 'D:\kun-data\kun-code-data\反无\cpp智能控制'
+$env:PATH='C:\Users\Administrator\miniconda3\envs\py310\Library\bin;' + $env:PATH
+.\build\msvc-opencv-release\tracker.exe --mode cam --config .\config\tracker_collect_nn.yaml
+
+2. Archive each collected log immediately
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\archive_tracker_log.py --src D:\kun-data\kun-code-data\反无\cpp智能控制\logs\tracker_log.csv --dst_dir D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\raw_logs --tag stable_01
+
+3. Merge all collected logs
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\merge_tracker_logs.py --input_dir D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\raw_logs --output_csv D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\stage1_merged_logs.csv
+
+4. Check log schema
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\check_tracker_log_schema.py --csv D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\stage1_merged_logs.csv
+
+5. Report dataset quality
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\report_stage1_dataset.py --csv D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\stage1_merged_logs.csv --output_json D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\outputs\stage1_dataset_report.json
+
+6. Build stage1 dataset
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\build_stage1_clean_dataset.py --input_csv D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\stage1_merged_logs.csv --output_dir D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\run01 --seq_len 16 --stride 1 --algorithm_latency_ms 8 --control_latency_ms 16 --actuation_latency_ms 20
+
+7. Report dataset with splits
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\report_stage1_dataset.py --csv D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\stage1_merged_logs.csv --dataset_npz D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\run01\stage1_clean_dataset.npz --output_json D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\outputs\stage1_dataset_report.json
+
+8. Run baselines
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\scripts\eval_stage1_baselines.py --csv D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\stage1_merged_logs.csv --meta_json D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\data\run01\stage1_clean_meta.json --output_json D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\outputs\stage1_baseline_summary.json
+
+9. Train clean-only TCN+GRU
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\train_stage1_clean.py --config D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\configs\stage1_tcn_gru.yaml
+
+10. Evaluate clean-only TCN+GRU
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\eval_stage1_clean.py --config D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\configs\stage1_tcn_gru.yaml
+
+11. Train clean-only dual-state
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\train_stage1_clean.py --config D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\configs\stage1_clean.yaml
+
+12. Evaluate clean-only dual-state
+C:\Users\Administrator\miniconda3\envs\py310\python.exe D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\eval_stage1_clean.py --config D:\kun-data\kun-code-data\反无\cpp智能控制\神经网络模块-最新版\configs\stage1_clean.yaml
+
+13. Pass condition
+Only move to stage2 if at least one clean-only model beats Raw, EMA, Median, plain KF, plain IMM, and Robust IMM-KF on held-out data, and the gains repeat on high_jitter, zoom_transition, lost_coasting, and fast_turn segments.

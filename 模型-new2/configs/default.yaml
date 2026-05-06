@@ -1,0 +1,29 @@
+# 默认配置文件
+model_type: causal_cnn_gru  # causal_cnn_gru, gru, lstm, mlp
+seed: 42
+
+# 数据参数
+data_path: processed_data.npz
+window_size: 2  # 滑动窗口大小
+seq_len: 8  # 历史窗口长度
+input_dim: 4  # e_ref_x, e_ref_y, d_ref_x, d_ref_y
+output_dim: 2  # delta_x, delta_y
+
+# 模型参数
+hidden_dim: 64
+
+# 损失函数权重
+lambda_pred: 1.0
+lambda_mag: 0.05
+lambda_dir: 0.1
+
+# 训练参数
+batch_size: 128
+epochs: 100
+lr: 0.001
+weight_decay: 0.0001
+patience: 15
+
+# 保存路径
+checkpoint_path: checkpoints/best.pth
+history_path: logs/history.json

@@ -1,0 +1,58 @@
+# IDE files
+.vscode/
+.vs/
+.idea/
+
+# CMake and build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# Runtime outputs and logs
+logs/
+outputs/
+artifacts/
+artifacts_ascii/
+**/artifacts/
+*.log
+*.csv
+
+# Bundled runtime packages and archives
+third_party/onnxruntime-win-x64-1.23.2/
+third_party/onnxruntime-win-x64-1.23.2.zip
+*.zip
+
+# Temporary files
+*.tmp
+*.bak
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Model checkpoints and packaged datasets
+*.pt
+*.pth
+*.npz
+
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.synctex(busy)
+*.xdv

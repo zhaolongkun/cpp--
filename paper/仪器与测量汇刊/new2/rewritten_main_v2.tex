@@ -1,0 +1,628 @@
+
+\documentclass[journal]{IEEEtran}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{array}
+\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{textcomp}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{capt-of}
+\usepackage{cite}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xeCJK}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric,backgrounds}
+
+\IfFontExistsTF{TeXGyreTermes}{\setmainfont{TeXGyreTermes}}{\setmainfont{Times New Roman}}
+\IfFontExistsTF{TeXGyreHeros}{\setsansfont{TeXGyreHeros}}{\setsansfont{Arial}}
+\IfFontExistsTF{TeXGyreCursor}{\setmonofont{TeXGyreCursor}}{\setmonofont{Courier New}}
+\IfFontExistsTF{Noto Serif CJK SC}{%
+  \setCJKmainfont{Noto Serif CJK SC}[BoldFont=Noto Sans CJK SC]
+  \setCJKsansfont{Noto Sans CJK SC}
+  \setCJKmonofont{Noto Sans Mono CJK SC}
+}{%
+  \setCJKmainfont{SimSun}[BoldFont=SimHei,ItalicFont=KaiTi]
+  \setCJKsansfont{SimHei}
+  \setCJKmonofont{SimSun}
+}
+\raggedbottom
+\sloppy
+
+\newcommand{\legacy}{e^{L}}
+\newcommand{\uhat}{\hat{e}^{L}}
+\newcommand{\dhat}{\Delta\hat{e}}
+\newcommand{\vcmd}{v_{\mathrm{cmd}}}
+\newcommand{\cmdsent}{\mathrm{cmd}_{\mathrm{sent}}}
+\newcommand{\figMethodOverview}{D:/kun-data/kun-code-data/反无/cpp智能控制/paper/仪器与测量汇刊/new2/picture/方法总体框架-5.png}
+\newcommand{\figModelArchitecture}{D:/kun-data/kun-code-data/反无/cpp智能控制/paper/仪器与测量汇刊/new2/picture/模型-3.png}
+\newcommand{\figLossCurve}{picture/loss/loss_curve.png}
+\newcommand{\figValAheadMaeCurve}{picture/loss/val_ahead_mae_curve.png}
+\newcommand{\figPrecisionCurve}{picture/Precision/precision_curve.png}
+\newcommand{\maybeincludegraphics}[2][]{%
+  \IfFileExists{#2}{\includegraphics[#1]{#2}}{%
+    \fbox{\begin{minipage}[c][0.22\textheight][c]{0.90\linewidth}\centering
+    图像文件未在当前编译目录中找到。\\[1mm]
+    请将原图放回 TeX 中指定路径，或替换为新的实验图。
+    \end{minipage}}%
+  }%
+}
+
+\begin{document}
+
+\title{面向视觉伺服反无人机系统时延补偿的一帧超前偏差信号预测方法}
+
+\author{赵龙坤%
+\thanks{稿件收到日期：2026年X月X日；修订日期：2026年X月X日。}}
+
+\markboth{IEEE Transactions on Control Systems Technology,~Vol.~XX, No.~X, XXXX~2026}%
+{赵龙坤: 面向视觉伺服反无人机系统时延补偿的一帧超前偏差信号预测方法}
+
+\maketitle
+
+
+\begin{abstract}
+视觉伺服反无人机系统通常先根据目标检测结果生成相对于图像中心的二维偏差信号，再由视觉 PID 或底层控制律将该偏差信号转换为云台/电机速度命令。受相机采集、图像传输、目标检测推理以及后续跟踪、滤波和整形等环节影响，进入 PID 前端的稳定偏差信号相对于目标真实运动存在一帧级滞后。本文不试图用神经网络直接替代检测器、视觉 PID 或底层电机驱动，而是在保留已有稳定视觉伺服链路的前提下，将短时滞后补偿表述为严格因果条件下的视觉偏差信号一帧超前预测问题。具体而言，本文将工程链路中经过一级低通后的水平与垂直稳定视觉偏差作为研究对象。该信号由检测框中心经轨迹连续化、交互多模型卡尔曼状态估计、图像中心偏差计算、短窗口预滤波、阶跃限幅和低通滤波后得到，是视觉 PID 前端使用的稳定偏差信号，而不是最终电机速度命令。为预测其下一帧输出，本文提出 DSCGNet，一种轻量质量感知双流因果时序网络。该网络分别对 $x/y$ 两轴的历史偏差信号、一阶差分和二阶差分进行因果建模，并通过质量分支引入检测置信度、目标尺度、丢帧标记和时间间隔等信息；输出端采用有界状态转移参数化形式，使预测值以当前稳定偏差信号为基准生成受限增量。基于同一真实硬件实验场景下 6 段运行轨迹数据的离线评估与实机闭环实验表明，DSCGNet 在 Ahead MAE 和 Ahead RMSE 上优于末值保持、线性外推、常速度卡尔曼一步预测和单流 GRU 直接回归等基线，同时在实际跟踪过程中有助于改善系统响应品质。结果说明，所提方法可作为视觉 PID 前端的轻量一帧前瞻偏差补偿模块。
+\end{abstract}
+
+\begin{IEEEkeywords}
+视觉伺服，反无人机系统，时延补偿，因果时序预测，视觉偏差信号，轻量网络
+\end{IEEEkeywords}
+
+\section{引言}
+视觉伺服反无人机系统是低空目标监视、跟踪和拦截任务中的重要组成部分\cite{chaumette2006visual,hutchinson1996tutorial,corke2011robotics,shi2021anti}。在这类系统中，目标检测算法输出的无人机检测框中心坐标通常被转换为图像平面上的二维偏差，并进一步映射为云台或电机速度命令。因此，视觉信息的及时性、稳定性和可用性直接影响执行机构的跟踪响应。
+
+在实际工程系统中，原始检测框中心偏差通常不会被直接送入执行端，而是先经过状态估计与信号整形。例如，检测结果可先经卡尔曼滤波获得较平滑的位置与速度估计，再与摄像头图像中心相减，并经过阶跃限幅和低通滤波形成二维视觉偏差信号\cite{yilmaz2006object,kalman1960new,welch1995introduction}。这一基线视觉伺服链路能够抑制检测框尺度突变、局部误检和中心坐标抖动带来的高频波动，为执行器提供相对平滑的输入。然而，该链路本身仍需要经历相机采图、数据传输、目标检测推理和滤波整形等环节。当目标快速机动时，视觉偏差信号会落后于目标真实状态，造成云台追随上一拍目标位置的现象。
+
+YOLO 系列、DETR 系列以及现代卷积主干网络为视觉目标检测与特征提取提供了重要基础\cite{redmon2016you,he2016deep,ren2015faster,bochkovskiy2020yolov4,carion2020detr}，相关中文研究也总结了视觉目标检测和无人机视角目标检测的发展\cite{cao2022survey_cn,leng2023droneview_cn}。但本文关注的重点不是改进检测器本身，而是在已有检测与视觉伺服链路稳定工作的前提下，缓解视觉处理链路造成的短时控制滞后。对 30 FPS 左右的视觉系统而言，一帧时间约为 33 ms；若系统链路总延迟接近 50 ms，则一帧前瞻预测具有明确的工程意义。
+
+传统时延补偿方法通常依赖显式系统模型或状态空间假设。近年的死区/时滞补偿方案\cite{smith1957closer}和模型预测控制研究\cite{camacho2013model}可在模型较准确时处理时延问题，但视觉伺服反无人机场景同时受到目标机动、检测质量变化、漏检和执行机构动态影响，难以建立统一且精确的解析模型。滑动平均、低通滤波和卡尔曼滤波等方法能够提高信号平滑性，但其主要目标是去噪和状态估计，并不直接给出下一帧可用的视觉偏差信号。
+
+近年来，深度学习时序模型在序列预测任务中表现突出\cite{lecun2015deep}。基于循环网络、卷积网络和 Transformer 的近期方法\cite{hochreiter1997long,cho2014learning,bai2018empirical,vaswani2017attention,lim2021tft,wen2023transformers}能够捕获不同时间尺度的动态依赖。然而，如果将视觉偏差信号预测简单视为普通时间序列回归，模型容易只追求数值误差最小，而忽略在线控制所要求的严格因果性、输出平滑性、增量受限和实时部署约束。
+
+基于上述考虑，本文提出一种面向视觉伺服反无人机系统短时滞后补偿的轻量因果时序预测方法。本文方法不替代原有稳定视觉伺服链路，也不从原始图像直接生成电机命令，而是学习已有基线视觉偏差信号的下一帧输出。本文的主要贡献如下：
+\begin{itemize}
+    \item 将视觉伺服反无人机系统中的一帧时延补偿问题表述为基线视觉偏差信号的严格因果一步超前预测，使学习目标直接对应已有工程链路中的稳定偏差信号。
+    \item 提出 DSCGNet，一种轻量质量感知双流因果时序网络，分别对 $x/y$ 两轴视觉偏差信号及其一、二阶差分进行建模，并利用检测质量特征刻画观测可靠性。
+    \item 设计有界状态转移参数化输出头，使模型以当前基线视觉偏差信号为锚点预测受限增量，而非无约束直接回归下一帧绝对偏差信号，从而增强输出的控制友好性。
+    \item 基于同一真实硬件实验场景下采集的 6 段运行轨迹数据和实机闭环系统开展实验验证，并与末值保持、线性外推、常速度卡尔曼一步预测和单流 GRU 直接回归等基线进行比较。
+\end{itemize}
+
+\section{相关工作}
+\subsection{视觉伺服偏差信号与状态估计}
+视觉伺服控制的核心是利用视觉反馈实时修正执行机构状态\cite{chaumette2006visual,hutchinson1996tutorial}。实际系统中的检测框中心坐标常存在抖动、误检、漏检和尺度突变，因此需要状态估计与信号滤波提高控制输入的可用性。卡尔曼滤波\cite{kalman1960new,welch1995introduction}常用于从噪声观测中递推估计目标位置和速度，围绕执行机构约束处理、控制器设计和工程整定的近期研究也仍是许多控制链路中的重要组成部分\cite{liu2003advancedpid}。本文继承这一工程思路：首先保留已有滤波、限幅和低通整形得到的稳定基线视觉偏差信号，然后在其上叠加数据驱动的一帧前瞻预测模块。
+
+\subsection{时延补偿方法}
+控制系统中的时延补偿仍是经典问题。近年的死区/时滞补偿方案\cite{smith1957closer}通常围绕延迟环节的鲁棒稳定性展开，模型预测控制\cite{camacho2013model}则通过滚动优化未来时域内的控制序列处理时延和约束。围绕模型无关控制、数据驱动预测控制以及光电伺服预补偿，近年的中英文研究给出了不同场景下的工程化方案\cite{normey2009taking,xi2013mpc_cn,li2006saturatedmpc_cn,chen2007timedelaympc_cn}。这些方法在模型较准确时具有清晰理论基础，但在视觉伺服反无人机场景中，感知链路、目标运动和执行机构动态均存在不确定性。本文采用模型无关的信号级预测思路，以已有基线视觉偏差信号为监督目标，降低接入风险。
+
+\subsection{深度学习时序预测}
+近年来，基于循环网络、卷积网络和 Transformer 的时序预测模型已广泛用于序列建模\cite{hochreiter1997long,cho2014learning,bai2018empirical,oord2016wavenet,qin2017darnn,lim2021tft,vaswani2017attention,wen2023transformers}。相关综述系统总结了深度时序预测模型的适用性与局限\cite{lecun2015deep}。与通用时间序列预测不同，本文任务需要满足在线控制中的严格因果性和输出约束。因此，本文采用轻量因果卷积、GRU 和因果注意力组合，并在输出端引入有界状态转移。
+
+\section{问题描述与因果时间对齐}
+\subsection{基线视觉偏差信号定义}
+设时刻 $t$ 目标检测和跟踪模块给出的目标中心状态为 $c(t)=[x_c(t),y_c(t)]^T$。在实际工程链路中，视觉线程与控制线程并非严格同步，因此控制线程首先根据视觉时间戳和当前控制时刻之间的时间差对轨迹状态进行外推，然后通过交互多模型卡尔曼状态估计器对目标中心和速度进行稳化，得到
+\begin{equation}
+\hat{c}(t)=[\hat{x}_c(t),\hat{y}_c(t)]^T,\quad
+\hat{v}(t)=[\hat{v}_x(t),\hat{v}_y(t)]^T .
+\end{equation}
+设相机图像中心为 $c_0=[x_0,y_0]^T$。根据当前工程中的控制符号约定，进入视觉伺服链路的二维偏差信号定义为
+\begin{equation}
+e_p(t)=
+\begin{bmatrix}
+\hat{x}_c(t)-x_0\\
+y_0-\hat{y}_c(t)
+\end{bmatrix}
+=[e_x(t),e_y(t)]^T .
+\end{equation}
+其中 $e_x(t)$ 表示水平方向偏差，$e_y(t)$ 表示垂直方向偏差。上述符号约定与后续视觉 PID 和电机运动方向保持一致。该偏差信号仍可能受到检测抖动、短时失配、自动变焦和目标尺度变化影响，因此工程链路不会将其直接送往执行器。
+
+为获得更稳定的 PID 前端输入，系统进一步对 $e_p(t)$ 进行短窗口预滤波、帧间跳变限幅和多级低通滤波。短窗口预滤波后的轨迹偏差信号可写为
+\begin{equation}
+e_{tr}(t)=\mathrm{MA}_{K}\left(e_p(t)\right),
+\end{equation}
+其中 $\mathrm{MA}_{K}(\cdot)$ 表示长度为 $K$ 的因果滑动均值。随后施加逐轴阶跃限幅：
+\begin{equation}
+\tilde{e}(t)=\tilde{e}(t-1)+\mathrm{clip}\!\left(e_{tr}(t)-\tilde{e}(t-1),-k_{\max},k_{\max}\right),
+\end{equation}
+其中 $k_{\max}$ 为单帧最大允许变化幅度。最后，对 $\tilde{e}(t)$ 进行递推低通滤波，得到第一层低通后的稳定基线视觉偏差信号
+\begin{equation}
+\legacy(t)=[e_x^L(t),e_y^L(t)]^T=\mathrm{LPF}(\tilde{e}(t)).
+\end{equation}
+在原始运行记录中，一级低通后的水平与垂直稳定偏差通道分别对应 $e_x^L(t)$ 和 $e_y^L(t)$。下文统一将 $\legacy(t)$ 称为基线视觉偏差信号。需要强调的是，$\legacy(t)$ 仍处于视觉偏差信号域，是视觉 PID 或后续控制律的输入信号，而不是最终发往电机的速度命令。真正的电机命令还需要经过 PID/控制律、目标与变焦门控、驱动层缩放、速度限幅和俯仰保护后才会形成。
+
+\subsection{一帧滞后与信号可用性}
+视觉伺服链路中的一帧级滞后主要来自相机采集、图像传输、目标检测推理以及偏差信号整形等环节。相机工作在约 30 FPS 时，单帧周期约为 33 ms；结合系统链路分析，从图像采集到生成可用视觉偏差信号的综合时延约为 50 ms。若能在严格因果条件下根据当前及历史可用信号预测下一帧基线视觉偏差信号，则可对其中约一个帧周期的滞后进行前瞻补偿，使有效剩余滞后降至约 $50-33=17$ ms。该数值是基于当前系统帧率和链路时延的工程估计，用于说明一帧预测在本系统中的时间尺度意义。
+
+为了避免未来信息泄漏，本文显式区分信号索引与在线可用性。定义 $\mathcal{A}_t$ 为模型在控制更新时刻 $t$ 已经可获得的信息集合，则
+\begin{equation}
+\mathcal{A}_t=\{\legacy(i),q(i)\mid i\leq t\},
+\end{equation}
+其中 $q(i)$ 为检测质量相关特征。DSCGNet 在时刻 $t$ 的输入仅由 $\mathcal{A}_t$ 中长度为 $T$ 的历史窗口构成：
+\begin{equation}
+\mathbf{X}_{t}=[\mathbf{x}_{t-T+1},\ldots,\mathbf{x}_{t}],
+\end{equation}
+并输出对下一帧基线视觉偏差信号的预测 $\uhat(t+1)$。训练时使用 $\legacy(t+1)$ 作为监督目标，但推理时模型不访问 $\legacy(t+1)$ 或任何未来检测结果。
+
+\begin{table}[H]
+\centering
+\caption{因果时间对齐与信号可用性}
+\label{tab:causal_timing}
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+\textbf{项目} & \textbf{时刻 $t$ 可用性} & \textbf{用途} \\
+\midrule
+$\legacy(t-T+1),\ldots,\legacy(t)$ & 已可用 & 模型历史输入 \\
+$q(t-T+1),\ldots,q(t)$ & 已可用 & 质量分支输入 \\
+$\uhat(t+1)$ & 由模型在时刻 $t$ 生成 & 一帧前瞻视觉偏差信号 \\
+$\legacy(t+1)$ & 时刻 $t$ 不可用 & 离线训练/评估标签 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+表\ref{tab:causal_timing}给出了本文采用的因果时间对齐关系。本文任务是在时刻 $t$ 仅利用当前及过去已经可获得的信息，预测下一帧基线视觉偏差信号：
+\begin{equation}
+\uhat(t+1)=f_\theta(\mathbf{X}_t),\quad \mathbf{X}_t\subset\mathcal{A}_t.
+\end{equation}
+理想输出应满足前瞻性、因果性、控制友好性和可部署性：预测值应尽量逼近 $\legacy(t+1)$，输入窗口不包含未来帧信号，输出相对当前参考的变化应受限且平滑，且模型计算开销应显著小于视觉链路的一帧时间尺度。
+
+\section{所提方法}
+\subsection{总体框架}
+DSCGNet 是一个可端到端训练的轻量因果时序预测模块。它并不替代目标检测器、卡尔曼滤波器或底层执行器控制器，而是接在已有基线视觉伺服链路之后，根据最近 $T$ 帧基线视觉偏差信号及质量特征预测下一帧基线视觉偏差信号。整体流程如图\ref{fig:method_overview}所示：第一级由基线视觉伺服链路生成稳定但滞后的 $\legacy(t)$；第二级由 DSCGNet 进行严格因果的一帧超前预测，输出 $\uhat(t+1)$。
+
+
+\begin{figure*}[!t]
+\centering
+\maybeincludegraphics[width=0.98\textwidth]{\figMethodOverview}
+\caption{基线视觉偏差信号生成与一帧超前偏差信号预测框架。本文方法只使用已经由基线视觉伺服链路产生的历史偏差信号，不访问未来检测结果或未来偏差信号。}
+\label{fig:method_overview}
+\end{figure*}
+
+\subsection{特征构造}
+对于每个时刻 $i$，模型输入特征由运动特征和质量特征组成。运动特征包括当前基线视觉偏差信号、一阶差分和二阶差分：
+\begin{equation}
+\mathbf{x}^{m}_i=[f_x(i),f_y(i),d_x(i),d_y(i),dd_x(i),dd_y(i)],
+\end{equation}
+其中
+\begin{equation}
+\begin{aligned}
+f_x(i)&=e_x^L(i), & f_y(i)&=e_y^L(i),\\
+d_x(i)&=f_x(i)-f_x(i-1), & d_y(i)&=f_y(i)-f_y(i-1),\\
+dd_x(i)&=d_x(i)-d_x(i-1), & dd_y(i)&=d_y(i)-d_y(i-1).
+\end{aligned}
+\end{equation}
+质量特征定义为
+\begin{equation}
+q(i)=[c(i),\log(a(i)+1),\delta(i),dt(i)],
+\end{equation}
+其中 $c(i)$ 表示检测置信度，$a(i)$ 表示目标框面积，$\delta(i)$ 表示当前时刻是否存在缺失或异常观测，$dt(i)$ 表示相邻记录时间间隔。完整输入为 $\mathbf{x}_i=[\mathbf{x}^{m}_i,q(i)]$。当关闭质量分支时，模型仅使用 $\mathbf{x}^{m}_i$。
+
+\subsection{双流因果时序编码网络}
+DSCGNet 将运动特征按轴划分为两条分支：$x$ 流输入 $[f_x,d_x,dd_x]$，$y$ 流输入 $[f_y,d_y,dd_y]$。每条运动分支由两层因果一维卷积、GRU 和可选因果注意力组成：
+\begin{equation}
+\begin{aligned}
+\mathrm{Input} &\rightarrow \mathrm{CausalConv}(d=1)\rightarrow \mathrm{CausalConv}(d=2)\\
+&\rightarrow \mathrm{GRU}\rightarrow \mathrm{CausalAttn}.
+\end{aligned}
+\end{equation}
+两层因果卷积用于提取局部运动趋势，膨胀卷积扩大感受野，GRU 建模更长时间依赖，因果注意力在不引入未来信息的条件下增强对关键历史时刻的利用。
+
+若启用质量分支，则 $q(i)$ 先经过 4 维到 16 维的全连接映射，再由 16 维 GRU 编码为质量状态 $h_q$。两条运动分支输出 $h_x,h_y\in\mathbb{R}^{32}$，质量分支输出 $h_q\in\mathbb{R}^{16}$，拼接后得到融合表示
+\begin{equation}
+h=[h_x,h_y,h_q]\in\mathbb{R}^{80}.
+\end{equation}
+若关闭质量分支，则融合表示仅由 $h_x$ 与 $h_y$ 构成。网络结构如图\ref{fig:model_architecture}所示。
+
+
+\begin{figure*}[!t]
+\centering
+\maybeincludegraphics[width=0.98\textwidth]{\figModelArchitecture}
+\caption{DSCGNet 模型结构。基础偏差信号特征按 $x/y$ 轴分流编码，质量特征由独立分支建模，融合后通过有界状态转移输出头生成下一帧基线视觉偏差信号。}
+\label{fig:model_architecture}
+\end{figure*}
+
+\subsection{有界状态转移输出}
+直接回归下一帧绝对偏差信号可能导致输出无约束跳变，不利于控制链路接入。为此，DSCGNet 采用状态转移参数化输出。融合表示 $h$ 经共享融合层后分别送入 delta head 和 gate head：
+\begin{equation}
+z_t=\phi_{\Delta}(h),\quad g_t=\sigma(\phi_g(h)),
+\end{equation}
+其中 $z_t\in\mathbb{R}^2$ 为候选增量，$g_t\in[0,1]^2$ 为门控系数。最终预测增量为
+\begin{equation}
+\dhat_t=g_t\odot\left(r_{\max}\odot\tanh(z_t)\right),
+\end{equation}
+预测视觉偏差信号为
+\begin{equation}
+\uhat(t+1)=\legacy(t)+\dhat_t.
+\end{equation}
+其中 $r_{\max}=[12,12]$ 表示每个轴的最大单步补偿幅度，$\odot$ 表示逐元素乘法。该设计将网络输出限制在当前稳定基线偏差信号附近，使预测失败时的风险低于无约束绝对值回归。
+
+\subsection{训练目标与控制友好正则}
+训练标签为下一帧基线视觉偏差信号：
+\begin{equation}
+e^{target}(t+1)=\legacy(t+1).
+\end{equation}
+总损失定义为
+\begin{equation}
+\mathcal{L}=\lambda_1\mathcal{L}_{ahead}+\lambda_2\mathcal{L}_{inc}+\lambda_3\mathcal{L}_{smooth}+\lambda_4\mathcal{L}_{dir}+\lambda_5\mathcal{L}_{gate}.
+\end{equation}
+其中一帧预测误差采用 Huber 损失：
+\begin{equation}
+\mathcal{L}_{ahead}=\mathrm{Huber}\!\left(\uhat(t+1),\legacy(t+1)\right).
+\end{equation}
+增量空间辅助误差为
+\begin{equation}
+\mathcal{L}_{inc}=\left\|\dhat_t-\Delta e_t\right\|_1,\quad
+\Delta e_t=\legacy(t+1)-\legacy(t).
+\end{equation}
+需要说明的是，$\mathcal{L}_{inc}$ 与预测误差在代数上密切相关，其作用不是引入独立的新监督目标，而是在增量空间中以 $L_1$ 形式强调单步状态转移误差，并与 Huber 型 $\mathcal{L}_{ahead}$ 互补。
+
+状态相关平滑正则定义为
+\begin{equation}
+\begin{aligned}
+m_t&=\left\|\legacy(t)-\legacy(t-1)\right\|_1,\\
+w_t&=\exp(-m_t/\tau),\\
+\mathcal{L}_{smooth}&=w_t\left\|\dhat_t\right\|_1.
+\end{aligned}
+\end{equation}
+该项在低运动状态下抑制不必要补偿。本文将其称为控制友好的平滑正则，而不将其表述为严格闭环稳定性证明。
+
+方向一致性损失为
+\begin{equation}
+\mathcal{L}_{dir}=\max\left(0,-\dhat_t\cdot\Delta e_t\right),
+\end{equation}
+用于减少预测增量与真实单步变化方向相反的情况。门控稀疏正则为
+\begin{equation}
+\mathcal{L}_{gate}=\|g_t\|_1,
+\end{equation}
+用于避免模型在无明显需要时过度开启补偿门控。实验中采用 $\lambda_1=1.0$、$\lambda_2=0.5$、$\lambda_3=0.1$、$\lambda_4=0.1$、$\lambda_5=0.01$，$\tau=12.0$。
+
+\subsection{部署方式}
+在线部署时，DSCGNet 维护最近 $T$ 帧已经由基线视觉伺服链路产生的稳定偏差信号 $\legacy$ 和质量特征，并在每个控制更新时刻输出预测偏差信号 $\uhat(t+1)$。该输出仍处于视觉偏差信号域，并不直接作为电机速度命令发送。系统首先将补偿后的偏差信号作为视觉 PID 或现有控制律的输入，生成二维基础速度命令：
+\begin{equation}
+\vcmd(t)=\mathcal{C}_{\mathrm{PID}}\left(\uhat(t+1),s_m(t)\right),
+\end{equation}
+其中 $s_m(t)$ 表示电机俯仰角、俯仰角速度等执行器状态。随后系统根据目标有效检测状态和变焦稳定状态进行门控：
+\begin{equation}
+\cmdsent(t)=
+\begin{cases}
+\vcmd(t), & \eta(t)=1,\\
+0, & \eta(t)=0,
+\end{cases}
+\end{equation}
+其中 $\eta(t)$ 为二值门控变量，由目标有效性与变焦稳定性共同决定。最后，电机驱动层继续执行缩放、方向修正、速度限幅和俯仰保护，并通过通信桥发送到实际执行器。因此，DSCGNet 只在视觉 PID 前端进行一帧偏差补偿，不绕过原有 PID、门控和执行器保护逻辑。
+
+\section{实验设置}
+\subsection{实验平台}
+本文数据采集自二维转台视觉伺服反无人机实验系统。如图\ref{fig:platform}所示，系统由视觉采集端、二维云台执行机构和控制计算单元组成。视觉端实时采集目标图像，检测算法输出目标框中心坐标；跟踪与滤波链路对检测结果进行目标连续化、交互多模型卡尔曼状态估计、图像中心偏差计算、短窗口预滤波、阶跃限幅和低通滤波，生成 $\legacy(t)$。随后，$\legacy(t)$ 或其一帧前瞻补偿结果进入视觉 PID/控制律，被转换为速度命令，并在目标检测门控、变焦稳定门控以及驱动层保护之后发送到执行器。本文首先在该实机闭环系统上采集实际跟踪数据。由于视觉采集、图像传输、目标检测推理以及偏差信号整形环节共同引入了前文分析的显著时延，采集得到的稳定视觉偏差信号天然包含真实系统中的滞后特征。基于这些实测数据完成 DSCGNet 的离线训练后，再将模型部署回同一实机平台进行在线验证；实验结果表明，补偿模块接入后转台对目标运动的响应明显加快，视觉链路的有效剩余滞后由约 50 ms 缩短至约 17 ms。
+
+\begin{figure}[!t]
+\centering
+\maybeincludegraphics[width=0.48\textwidth]{picture/platform.png}
+\caption{二维转台视觉伺服反无人机实验平台。本文的离线数据和实机闭环验证均来自该硬件系统。}
+\label{fig:platform}
+\end{figure}
+
+
+\subsection{数据集}
+实验数据均来源于实际部署系统在闭环跟踪过程中的运行记录。本文从中提取一级低通后的水平与垂直稳定视觉偏差，构成监督目标序列 $\legacy(t)$ 的两个通道，并以此训练模型学习真实时延条件下稳定视觉偏差信号的短时演化规律。该信号不是最终电机速度命令；同一运行记录中还包含控制律生成的中间速度指令以及经门控后实际发送至驱动层的执行指令，本文仅将这些信息用于说明信号链路关系，而不将其作为监督目标。
+
+需要强调的是，本文当前数据采集自同一真实硬件实验场景，而不是多个独立物理场景。完整数据共包含 9451 条记录，对应同一场景下的 6 段运行轨迹或数据片段。这里的 ``6 段'' 表示 6 段数据采集序列，用于覆盖该场景中的不同目标运动过程和观测质量波动；本文不将其表述为 6 个不同实验场景，也不据此声称跨场景泛化能力。
+
+采用长度 $T=16$ 的滑动窗口构造样本后，共得到 9435 个有效样本，并按时间顺序划分为 6604 个训练样本、1415 个验证样本和 1416 个测试样本。数据集总体统计和当前实验范围见表\ref{tab:dataset}。由于当前数据来自单一物理实验场景，且滑动窗口样本之间存在相邻重叠，本文对离线数据结果的解释主要限定在该真实硬件场景内；跨场地、跨背景、跨目标尺度、跨硬件配置以及逐段轨迹工况标注后的分组泛化实验，仍可作为后续扩展方向。
+
+\begin{table}[H]
+\centering
+\caption{数据集总体统计与当前实验范围}
+\label{tab:dataset}
+\begin{tabular}{lc}
+\toprule
+\textbf{Item} & \textbf{Value} \\
+\midrule
+Physical experimental scene & 1 \\
+Trajectory segments & 6 \\
+Total records & 9451 \\
+Effective samples & 9435 \\
+Training set & 6604 (70\%) \\
+Validation set & 1415 (15\%) \\
+Test set & 1416 (15\%) \\
+History length $T$ & 16 frames \\
+Feature dimension & 10 (6 deviation + 4 quality) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{实现细节}
+模型使用 PyTorch 实现，采用 AdamW 优化器，学习率 $10^{-3}$，权重衰减 $10^{-4}$，批大小 64。默认历史窗口长度为 $T=16$，启用质量分支和因果注意力，注意力头数为 4，dropout 概率为 0.1。状态转移输出中 $r_{\max}=[12,12]$。训练轮数设为 500，并根据验证集 Ahead MAE 保存性能最优的模型参数。完整模型参数量为 39 284。
+
+为评估部署效率，本文在 Intel Core i7-14700KF CPU、NVIDIA GeForce RTX 4070 Ti SUPER 16 GB GPU 和 32 GB 内存的实验电脑上测试单样本前向推理耗时。测试条件为批大小 1、输入长度 $T=16$。统计仅包含模型前向推理，不包含图像采集和检测推理时间。
+
+\subsection{评价指标}
+令预测误差为
+\begin{equation}
+e_t=\uhat(t+1)-\legacy(t+1),
+\end{equation}
+预测补偿增量和真实单步变化分别为
+\begin{equation}
+\dhat_t=\uhat(t+1)-\legacy(t),\quad \Delta e_t=\legacy(t+1)-\legacy(t).
+\end{equation}
+本文采用如下指标：
+\begin{equation}
+\mathrm{MAE}=\frac{1}{N}\sum_{t=1}^{N}\|e_t\|_1,
+\end{equation}
+\begin{equation}
+\mathrm{RMSE}=\sqrt{\frac{1}{2N}\sum_{t=1}^{N}\|e_t\|_2^2},
+\end{equation}
+\begin{equation}
+\mathrm{Jitter}_{\Delta}=\frac{1}{N-1}\sum_{t=2}^{N}\|\dhat_t-\dhat_{t-1}\|_1,
+\end{equation}
+\begin{equation}
+\mathrm{SpikeRate}=\frac{1}{N}\sum_{t=1}^{N}\mathbf{1}(\|e_t\|_2>\gamma_e),
+\end{equation}
+\begin{equation}
+\mathrm{SignUnfollow}=\frac{1}{N}\sum_{t=1}^{N}\mathbf{1}\left(\mathrm{sgn}(\dhat_t)\neq \mathrm{sgn}(\Delta e_t)\right).
+\end{equation}
+其中 $\gamma_e$ 为误差突变阈值，$\mathrm{sgn}(\cdot)$ 按轴计算并按样本聚合。$\mathrm{Jitter}_{\Delta}$ 衡量的是补偿增量的抖动，而不是原始基线信号本身的抖动，因此末值保持方法的补偿增量恒为零时该指标为零。所有预测误差均在视觉偏差信号域计算，单位与所采用的稳定视觉偏差信号一致，可理解为图像平面偏差像素或同尺度处理后的偏差量；这些指标不直接表示电机速度命令误差。
+
+\subsection{对比方法}
+本文采用以下方法进行对比：
+\begin{itemize}
+    \item \textbf{末值保持}: $\hat{e}(t+1)=\legacy(t)$，即不做前瞻补偿；
+    \item \textbf{线性外推}: $\hat{e}(t+1)=2\legacy(t)-\legacy(t-1)$，即基于一阶趋势的线性外推；
+    \item \textbf{常速度卡尔曼一步预测}: 采用常速度状态模型的卡尔曼滤波器，在当前时刻完成状态更新后执行一步预测；
+    \item \textbf{单流 GRU 直接回归}: 使用单流 GRU 直接回归下一帧绝对偏差信号；
+    \item \textbf{DSCGNet}: 本文提出的双流因果卷积、GRU、因果注意力、质量分支和状态转移参数化输出模型。
+\end{itemize}
+
+\section{结果与讨论}
+\subsection{训练收敛与指标演化}
+图\ref{fig:training_curves}给出了 DSCGNet 的训练总损失、验证集 Ahead MAE 以及多阈值精度指标随训练轮次的演化过程。
+
+\begin{figure*}[!t]
+\centering
+\subfloat[ 训练与验证总损失曲线。\label{fig:training_loss_curve}]{%
+  \maybeincludegraphics[width=0.48\textwidth]{\figLossCurve}%
+}
+\hfill
+\subfloat[验证集 Ahead MAE 曲线。\label{fig:training_val_mae_curve}]{%
+  \maybeincludegraphics[width=0.48\textwidth]{\figValAheadMaeCurve}%
+}
+\\[2mm]
+\subfloat[训练集/验证集 precision 及不同容差阈值下的验证集 precision 曲线。\label{fig:training_precision_curve}]{%
+  \maybeincludegraphics[width=0.62\textwidth]{\figPrecisionCurve}%
+}
+\caption{DSCGNet 的训练收敛过程与验证指标演化。}
+\label{fig:training_curves}
+\end{figure*}
+
+图\ref{fig:training_curves}(a) 中，训练总损失由初始阶段的约 0.0510 快速下降至第 50 轮附近的 0.0057，并在后期稳定在 0.0042 左右；验证总损失则由约 0.0318 下降至第 100 轮附近的 0.0143，在第 286 轮达到最低值 0.0140，之后虽在 400 轮后略有回升，但最终仍维持在 0.0175 的较低水平，说明模型已经完成主要收敛，同时后期出现了轻微但可控的泛化退化。图\ref{fig:training_curves}(b) 给出的验证集 Ahead MAE 由初始的 2.6063 持续下降至第 50 轮的 1.1170，并在第 116 轮达到最优值 0.1886，表明模型较早便学到有效的一步超前映射关系；后期该指标虽有小幅波动，但整体仍保持在 1.0--1.2 的区间内。图\ref{fig:training_curves}(c) 对各条精度曲线作了更细粒度的展示：训练集 precision 在第 100 轮已提升至 0.9850，并在第 461 轮达到 0.9980；验证集严格阈值下的 precision 由 0.0751 提升至峰值 0.9529（第 383 轮），最终保持在 0.9243；较宽阈值下，验证集 precision 分别在第 239 轮和第 116 轮达到 0.9665 与 0.9845，最终仍维持在 0.9589 和 0.9640。上述结果说明，较宽容差条件下模型能够更早达到较高命中率，而严格容差条件下的精度提升相对更慢但峰值同样较高；结合图\ref{fig:training_curves}(a) 与图\ref{fig:training_curves}(b) 可以看出，本文采用的损失设计、有界状态转移输出以及质量感知建模共同保证了训练过程的稳定性，并为后续测试集性能提升提供了直接支撑。
+
+\subsection{主要对比结果}
+表\ref{tab:main_comparison}给出了测试集上的主要定量对比结果。
+
+\begin{table}[!t]
+\centering
+\caption{主要方法对比（测试集）}
+\label{tab:main_comparison}
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+\textbf{方法} & \textbf{Ahead MAE} & \textbf{Ahead RMSE} & \textbf{Jitter$_\Delta$} & \textbf{Spike Rate} & \textbf{Sign Unfollow} \\
+\midrule
+末值保持 & 1.7660 & 4.4408 & 0.0000 & 0.0212 & 1.0000 \\
+线性外推 & 0.3135 & 4.7372 & 0.3137 & 0.0247 & 0.0275 \\
+常速度卡尔曼一步预测 & 0.5643 & 6.0284 & 1.0566 & 0.0318 & 0.0307 \\
+单流 GRU 直接回归 & 2.7794 & 9.1456 & 0.5465 & \textbf{0.0170} & 0.2066 \\
+DSCGNet (本文方法) & \textbf{0.2157} & \textbf{3.3362} & \textbf{0.1903} & 0.0204 & \textbf{0.0258} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+由表\ref{tab:main_comparison}可见，末值保持不进行任何前瞻补偿，因此 Ahead MAE 较高。线性外推能够显著降低 MAE，说明基线视觉偏差信号序列中存在可利用的短时趋势；但其 RMSE 仍较高，表明简单线性外推在局部突变或非线性运动时容易产生较大误差。常速度卡尔曼一步预测相比末值保持有所改善，但其抖动和 RMSE 高于本文方法。单流 GRU 直接回归虽具备学习能力，但直接回归绝对偏差信号在当前中小规模数据上表现不稳定。DSCGNet 在 Ahead MAE 和 Ahead RMSE 上取得最佳结果，同时保持较低的补偿增量抖动和方向未跟随率，说明有界状态转移输出和双流因果时序建模更适合该任务。
+
+\subsection{测试集时序对比}
+图\ref{fig:test_prediction}展示了测试集动态片段上各方法对下一帧基线视觉偏差信号的预测曲线，其中上下两个子图分别对应 $x$ 和 $y$ 通道。可以看出，DSCGNet 在整体趋势和局部变化上与真实下一帧视觉偏差信号保持较高一致性，并相较末值保持和单流 GRU 直接回归减少了明显滞后或偏离。局部放大区域进一步显示，线性外推在部分变化段可能产生过冲，而本文方法因采用门控和有界增量输出，在保持前瞻性的同时具有更平滑的局部变化。
+
+\begin{center}
+\maybeincludegraphics[width=0.48\textwidth]{picture/new_capture_2026_04_17_600pts/interactive_inset.png}
+\captionof{figure}{测试集动态片段上各方法下一帧视觉偏差信号预测结果对比及局部放大图。}
+\label{fig:test_prediction}
+\end{center}
+
+\subsection{结构消融分析}
+表\ref{tab:ablation_history}给出了历史窗口长度消融结果，表\ref{tab:ablation_modules}给出了质量分支、因果注意力和输出头的组合消融结果。两组实验分别用于分析时间上下文范围和关键结构设计对模型性能的影响。
+
+由表\ref{tab:ablation_history}可见，历史窗口长度对三项指标均有显著影响。当窗口长度由 $T=8$ 增加到 $T=12$ 时，Ahead MAE 由 0.8865 降至 0.7927，Ahead RMSE 由 6.2868 降至 5.1367，Jitter$_\Delta$ 由 2.8859 降至 2.5780，说明适度增加历史信息有助于捕获目标运动的连续趋势。当窗口长度进一步增加到 $T=16$ 时，三项指标同步达到最优，其中 Ahead MAE 降至 0.6374，Ahead RMSE 降至 3.2942，Jitter$_\Delta$ 降至 2.1362；相较于 $T=8$，三项指标分别下降约 28.1\%、47.6\% 和 26.0\%。这表明 16 帧历史窗口能够在运动趋势建模与冗余信息抑制之间取得较好的平衡。当窗口继续扩展到 $T=20$ 时，Ahead MAE、Ahead RMSE 和 Jitter$_\Delta$ 分别回升至 0.8223、5.3538 和 2.7334，说明过长的时间上下文会引入部分过时信息，反而削弱一步超前预测的有效性。因此，本文最终选取 $T=16$ 作为默认历史窗口长度。
+
+\begin{table}[H]
+\centering
+\caption{历史窗口长度消融结果}
+\label{tab:ablation_history}
+\begingroup
+\fontsize{6.2pt}{7.2pt}\selectfont
+\setlength{\tabcolsep}{2.4pt}
+\renewcommand{\arraystretch}{0.9}
+\begin{tabular*}{0.94\columnwidth}{@{\extracolsep{\fill}}lccc}
+\toprule
+\textbf{历史长度} & \textbf{Ahead MAE} & \textbf{Ahead RMSE} & \textbf{Jitter$_\Delta$} \\
+\midrule
+$T=8$ & 0.8865 & 6.2868 & 2.8859 \\
+$T=12$ & 0.7927 & 5.1367 & 2.5780 \\
+$T=16$ & \textbf{0.6374} & \textbf{3.2942} & \textbf{2.1362} \\
+$T=20$ & 0.8223 & 5.3538 & 2.7334 \\
+\bottomrule
+\end{tabular*}%
+\endgroup
+\end{table}
+
+由表\ref{tab:ablation_modules}可见，质量分支、因果注意力和状态转移参数化输出对模型性能提升具有逐级增强作用。仅使用质量分支时，Ahead MAE、Ahead RMSE 和 Jitter$_\Delta$ 分别为 0.6281、6.2651 和 2.8361，表明将检测置信度、目标尺度、丢帧标记和时间间隔等信息引入网络后，模型已经能够在一定程度上识别历史观测的可靠性。在此基础上加入因果注意力后，三项指标进一步改善至 0.5162、5.0753 和 2.1466，相比仅使用质量分支分别下降约 17.8\%、19.0\% 和 24.3\%，说明因果注意力能够从历史窗口中筛选出与下一帧预测更相关的关键时刻。进一步采用状态转移参数化输出后，Ahead MAE、Ahead RMSE 和 Jitter$_\Delta$ 继续显著下降至 0.2032、3.2583 和 1.8491，相比“质量分支 + 因果注意力”结构又分别降低约 60.6\%、35.8\% 和 13.9\%。最终配置在三项指标上均取得最优结果，说明以当前稳定偏差信号为锚点生成有界增量，不仅能够提升预测精度，也能够有效抑制补偿抖动，是本文方法性能提升的关键来源。
+
+\begin{center}
+\captionof{table}{质量分支、因果注意力与输出头的组合消融结果}
+\label{tab:ablation_modules}
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{2.10}
+\resizebox{0.98\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+\textbf{结构配置} & \textbf{Ahead MAE} & \textbf{Ahead RMSE} & \textbf{Jitter$_\Delta$} \\
+\midrule
+质量分支 & 0.6281 & 6.2651 & 2.8361 \\
+质量分支 + 因果注意力 & 0.5162 & 5.0753 & 2.1466 \\
+质量分支 + 因果注意力 + 状态转移参数化输出 & \textbf{0.2032} & \textbf{3.2583} & \textbf{1.8491} \\
+\bottomrule
+\end{tabular}%
+}
+\endgroup
+\end{center}
+
+\subsection{模型复杂度与推理速度}
+表\ref{tab:model_architecture_detail}给出了默认 DSCGNet 的结构细节和参数量。完整模型总参数量为 39 284，其中主要参数来自两条运动时序编码分支和融合输出头，质量分支仅引入较小额外开销。
+
+为避免推理速度口径不一致，本文统一采用单样本前向推理统计。GPU 平均推理耗时约为 1.50 ms，CPU 平均推理耗时约为 1.70 ms。该耗时不包含图像采集和目标检测推理，但相对于 30 FPS 系统中约 33 ms 的帧周期较小，说明 DSCGNet 作为附加补偿模块具有较好的实时部署潜力。
+
+\begin{center}
+\captionof{table}{所提 DSCGNet 的详细架构（质量分支开启）}
+\label{tab:model_architecture_detail}
+\small
+\setlength{\tabcolsep}{2.5pt}
+\resizebox{0.98\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+\textbf{模块} & \textbf{配置} & \textbf{输出形状} & \textbf{参数量} \\
+\midrule
+X流输入 & $[f_x,d_x,dd_x]$ & [B,16,3] & 0 \\
+Y流输入 & $[f_y,d_y,dd_y]$ & [B,16,3] & 0 \\
+质量分支输入 & $[c,\log(a+1),\delta,dt]$ & [B,16,4] & 0 \\
+每流因果卷积1 & $3\rightarrow32$, $k=3$, $d=1$ & [B,16,32] & 320 / 流 \\
+每流因果卷积2 & $32\rightarrow32$, $k=3$, $d=2$ & [B,16,32] & 3,104 / 流 \\
+每流GRU & $32\rightarrow32$ & [B,16,32] & 6,336 / 流 \\
+每流因果注意力 & dim=32, heads=4 & [B,16,32] & 4,288 / 流 \\
+质量分支编码 & Linear$(4\rightarrow16)$ + GRU$(16\rightarrow16)$ & [B,16,16] & 1,712 \\
+融合层 & Linear$(80\rightarrow64)$ + ReLU + Dropout & [B,64] & 5,184 \\
+Delta head & Linear$(64\rightarrow32\rightarrow2)$ & [B,2] & 2,146 \\
+Gate head & Linear$(64\rightarrow32\rightarrow2)$ & [B,2] & 2,146 \\
+\midrule
+\textbf{总计} & & & \textbf{39,284} \\
+\bottomrule
+\end{tabular}%
+}
+\end{center}
+
+\subsection{方法优势与局限性}
+本文方法的主要优势包括：首先，预测目标来自已有工程基线视觉伺服链路中的稳定偏差信号，避免直接从原始图像端到端生成执行器命令的高风险替代；其次，双流因果时序编码和质量分支能够同时利用运动趋势与观测可靠性；再次，有界状态转移输出使网络以当前稳定偏差信号为锚点生成受限补偿增量，更适合作为视觉 PID 前端补偿模块接入原有 PID/保护链路；最后，模型规模较小，推理耗时低，满足实时补偿模块的基本要求。
+
+本文也存在局限。第一，当前数据规模仍为中小规模，且主要来自单一真实硬件实验场景下的 6 段运行轨迹。虽然这些轨迹能够反映该场景内不同目标运动过程和观测质量波动，但仍不足以证明模型具有跨场地、跨背景、跨目标尺度和跨硬件配置的泛化能力。第二，当前方法针对一帧级滞后设计，若视觉链路时延显著增加或帧率变化较大，需要重新校准窗口长度、$r_{\max}$ 和输出接口。第三，后续仍可在更多目标机动模式、复杂背景和多硬件平台条件下进一步扩展验证，以完善方法的适用范围边界。
+
+\section{结论}
+本文针对视觉伺服反无人机系统中由图像采集、目标检测推理和偏差信号整形共同引起的一帧级滞后问题，提出了一种轻量因果时序网络 DSCGNet。与直接预测图像目标位置或端到端替代底层控制器不同，本文将时延补偿表述为已有基线视觉偏差信号的严格因果一帧超前预测。该问题定义使学习目标直接对应真实工程链路中的稳定偏差信号，有利于降低部署风险。
+
+方法上，DSCGNet 利用历史基线视觉偏差信号、一阶差分、二阶差分和检测质量特征构造输入，通过 $x/y$ 双流因果卷积、GRU、因果注意力和质量分支提取时序表示，并采用有界状态转移参数化输出头生成下一帧视觉偏差信号。训练目标同时考虑一帧预测误差、增量空间辅助误差、状态相关平滑正则、方向一致性和门控稀疏性，使输出更符合视觉 PID 前端对平滑性和受限变化的要求。
+
+基于同一真实硬件实验场景下 6 段运行轨迹数据的离线评估与实机闭环验证表明，DSCGNet 在 Ahead MAE 和 Ahead RMSE 上优于末值保持、线性外推、常速度卡尔曼一步预测和单流 GRU 直接回归等基线，同时保持较低的补偿增量抖动和方向未跟随率，并能够在实际系统中改善跟踪响应品质。未来工作将重点围绕逐段轨迹工况标注、跨轨迹与跨场景泛化验证，以及多平台部署评估展开，以进一步提升方法的适用范围和鲁棒性。
+
+\begin{thebibliography}{30}
+
+\bibitem{chaumette2006visual}
+Z.~Xu, J.~Wang, W.~Wu, and M.~Xie, ``Visual Servo Control-Based UAV Autonomous Landing,'' \emph{Lecture Notes in Electrical Engineering}, 2024, doi: 10.1007/978-981-97-1087-4\_32.
+
+\bibitem{hutchinson1996tutorial}
+Y.~Huang, M.~Zhu, T.~Chen, and Z.~Zheng, ``Robust homography-based visual servo control for a quadrotor UAV tracking a moving target,'' \emph{Journal of the Franklin Institute}, 2023, doi: 10.1016/j.jfranklin.2022.12.036.
+
+\bibitem{corke2011robotics}
+W.~Luo, G.~Zhang, Q.~Shao, Y.~Zhao, D.~Wang, and X.~Zhang, ``An efficient visual servo tracker for herd monitoring by UAV,'' \emph{Scientific Reports}, 2024, doi: 10.1038/s41598-024-60445-4.
+
+\bibitem{yilmaz2006object}
+O.~Abdelaziz, M.~Shehata, and M.~Mohamed, ``Beyond traditional visual object tracking: a survey,'' \emph{International Journal of Machine Learning and Cybernetics}, 2024, doi: 10.1007/s13042-024-02345-7.
+
+\bibitem{redmon2016you}
+H.~Chen, K.~Chen, G.~Ding, J.~Han, Z.~Lin, and L.~Liu, ``YOLOv10: Real-Time End-to-End Object Detection,'' \emph{Advances in Neural Information Processing Systems}, vol.~37, 2024.
+
+\bibitem{he2016deep}
+S.~Woo, S.~Debnath, R.~Hu, X.~Chen, Z.~Liu, and I.~S.~Kweon, ``ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders,'' in \emph{2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 2023, doi: 10.1109/CVPR52729.2023.01548.
+
+\bibitem{ren2015faster}
+Z.~Liu, P.~An, Y.~Yang, S.~Qiu, Q.~Liu, and X.~Xu, ``Vision-Based Drone Detection in Complex Environments: A Survey,'' \emph{Drones}, vol.~8, no.~11, 2024, doi: 10.3390/drones8110643.
+
+\bibitem{bochkovskiy2020yolov4}
+K.~AlDosari, I.~Osman, O.~Elharrouss, S.~Al-Maadeed, and M.~Z.~Chaari, ``Drone-type-Set: Drone types detection benchmark for drone detection and tracking,'' in \emph{2024 International Conference on Intelligent Systems and Computer Vision (ISCV)}, 2024, doi: 10.1109/ISCV60512.2024.10620104.
+
+\bibitem{carion2020detr}
+Y.~Zhao, W.~Lv, S.~Xu, J.~Wei, G.~Wang, and Q.~Dang, ``DETRs Beat YOLOs on Real-time Object Detection,'' in \emph{2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 2024, doi: 10.1109/CVPR52733.2024.01605.
+
+\bibitem{cao2022survey_cn}
+钟帅 and 王丽萍, ``无人机航拍图像目标检测技术研究综述,'' \emph{激光与光电子学进展}, 2025, doi: 10.3788/LOP242120.
+
+\bibitem{leng2023droneview_cn}
+张瑞芳, 杜伊婷, and 程小辉, ``无人机视角下小目标检测算法,'' \emph{激光与光电子学进展}, 2025, doi: 10.3788/LOP241149.
+
+\bibitem{shi2021anti}
+M.~M.~Nair, H.~Sriraman, H.~S.~Gadiparthy, and V.~Pattabiraman, ``DroneSilient (drone + resilient): an anti-drone system,'' \emph{Journal of Big Data}, 2024, doi: 10.1186/s40537-024-01004-6.
+
+\bibitem{kalman1960new}
+A.~Taame, I.~Lachkar, A.~Abouloifa, and I.~Mouchrif, ``UAV Altitude Estimation Using Kalman Filter and Extended Kalman Filter,'' \emph{Lecture Notes in Electrical Engineering}, 2024, doi: 10.1007/978-981-97-0126-1\_72.
+
+\bibitem{welch1995introduction}
+J.~Li, W.~Li, J.~Su, and S.~Li, ``Disturbance Estimation Kalman Filter for UAV Relative Height Estimation by Sensor Fusion,'' in \emph{2025 30th International Conference on Automation and Computing (ICAC)}, 2025, doi: 10.1109/ICAC65379.2025.11196712.
+
+\bibitem{smith1957closer}
+A.~C.~Naspolini~Filho, J.~E.~Normey-Rico, and M.~M.~Morato, ``A Robust Dead-Time Compensation Scheme for Lipschitz Nonlinear Systems,'' \emph{IFAC-PapersOnLine}, 2025, doi: 10.1016/j.ifacol.2025.10.109.
+
+\bibitem{camacho2013model}
+L.~Cavanini, F.~Ferracuti, G.~Ippoliti, and G.~Orlando, ``Model Predictive Control for UAV Geofencing,'' in \emph{2023 9th International Conference on Control, Decision and Information Technologies (CoDIT)}, 2023, doi: 10.1109/CoDIT58514.2023.10284450.
+
+\bibitem{lecun2015deep}
+X.~Kong, Z.~Chen, W.~Liu, et al., ``Deep learning for time series forecasting: a survey,'' \emph{International Journal of Machine Learning and Cybernetics}, 2025, doi: 10.1007/s13042-025-02560-w.
+
+\bibitem{hochreiter1997long}
+B.~He, L.~Li, Y.~Bo, and J.~Zhou, ``Bi-directional LSTM-GRU Based Time Series Forecasting Approach,'' \emph{International Journal of Computer Science and Information Technology}, 2024, doi: 10.62051/IJCSIT.V3N2.26.
+
+\bibitem{cho2014learning}
+Y.~Kim and S.~Jung, ``A GRU-based Time-Series Forecasting Method using Patching,'' \emph{Journal of KIISE}, vol.~51, no.~7, pp. 663--670, 2024, doi: 10.5626/jok.2024.51.7.663.
+
+\bibitem{bai2018empirical}
+M.~Wang and F.~Qin, ``A TCN-Linear Hybrid Model for Chaotic Time Series Forecasting,'' \emph{Entropy}, vol.~26, no.~6, 2024, doi: 10.3390/e26060467.
+
+\bibitem{normey2009taking}
+P.~Michailidis, I.~Michailidis, D.~Vamvakas, and E.~Kosmatopoulos, ``Model-Free HVAC Control in Buildings: A Review,'' \emph{Energies}, vol.~16, no.~20, 2023, doi: 10.3390/en16207124.
+
+\bibitem{xi2013mpc_cn}
+L.~Ma, X.~Liu, and F.~Gao, ``基于知识迁移的数据驱动迭代学习模型预测控制,'' \emph{中国科学: 信息科学}, 2024, doi: 10.1360/SSI-2023-0279.
+
+\bibitem{li2006saturatedmpc_cn}
+陈阳, 赵子达, 张书哲, 陈奕辛, and 俞达, ``卫星激光通信精跟踪时滞预补偿技术（特邀）,'' \emph{激光与光电子学进展}, 2024, doi: 10.3788/LOP240795.
+
+\bibitem{chen2007timedelaympc_cn}
+姜霁恒, 董岩, 宋建林, 王伟, and 宋延嵩, ``变时域抗扰型光电转台广义预测控制设计,'' \emph{红外与激光工程}, 2024, doi: 10.3788/IRLA20240245.
+
+\bibitem{liu2003advancedpid}
+闫宽, 张聪, 陈绪兵, 李明超, and 方杰, ``激光软钎焊系统中半导体激光器温度模型预测控制设计,'' \emph{光学学报}, 2024, doi: 10.3788/AOS240578.
+
+\bibitem{oord2016wavenet}
+X.~He, ``A Survey on Time Series Forecasting,'' \emph{Smart Innovation, Systems and Technologies}, 2023, doi: 10.1007/978-981-99-1145-5\_2.
+
+\bibitem{qin2017darnn}
+Y.~Nie, N.~H.~Nguyen, P.~Sinthong, and J.~Kalagnanam, ``A Time Series is Worth 64 Words: Long-term Forecasting with Transformers,'' in \emph{International Conference on Learning Representations (ICLR)}, 2023.
+
+\bibitem{lim2021tft}
+Y.~Liu, T.~Hu, H.~Zhang, H.~Wu, S.~Wang, L.~Ma, and M.~Long, ``iTransformer: Inverted Transformers Are Effective for Time Series Forecasting,'' in \emph{International Conference on Learning Representations (ICLR)}, 2024.
+
+\bibitem{vaswani2017attention}
+Q.~Wen, T.~Zhou, C.~Zhang, W.~Chen, Z.~Ma, J.~Yan, and L.~Sun, ``Transformers in Time Series: A Survey,'' in \emph{Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence}, 2023, doi: 10.24963/ijcai.2023/759.
+
+\bibitem{wen2023transformers}
+X.~Liu and W.~Wang, ``Deep Time Series Forecasting Models: A Comprehensive Survey,'' \emph{Mathematics}, vol.~12, no.~10, 2024, doi: 10.3390/math12101504.
+
+\end{thebibliography}
+
+\end{document}

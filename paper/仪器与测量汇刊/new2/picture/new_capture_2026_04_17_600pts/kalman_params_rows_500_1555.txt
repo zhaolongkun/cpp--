@@ -1,0 +1,19 @@
+Kalman CV baseline for one-step-ahead legacy control prediction
+raw_data_csv=D:\kun-data\kun-code-data\反无\cpp智能控制\data\track-fusion-move_2026-4-17_new.csv
+reference_split_csv=D:\kun-data\kun-code-data\反无\cpp智能控制\data\train\track-fusion-move_2026-4-17_new_dscgnet_predictions.csv
+selected_q_scale=0.03
+selected_r_scale=0.003
+selection_criterion=lowest avg MAE over validation split
+
+Top validation candidates:
+ q_scale  r_scale  val_avg_mae_xy
+   0.030    0.003        1.371662
+   0.100    0.010        1.371662
+   0.010    0.001        1.371662
+   0.030    0.001        1.379559
+   0.100    0.003        1.383656
+   0.100    0.030        1.390136
+   0.010    0.003        1.390136
+   0.030    0.010        1.391713
+   0.003    0.001        1.391713
+   0.010    0.010        1.423530

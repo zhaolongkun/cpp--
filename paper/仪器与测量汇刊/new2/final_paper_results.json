@@ -1,0 +1,92 @@
+{
+  "best_alpha": 1.0,
+  "best_smith_a": 1.0,
+  "main_comparison": {
+    "Ref Only": {
+      "mae_future": 1.7028759717941284,
+      "rmse_future": 2.48016357421875,
+      "jitter": 1.7037209272384644,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146
+    },
+    "Kalman": {
+      "mae_future": 0.062900610268116,
+      "rmse_future": 0.09313146024942398,
+      "jitter": 1.7091851234436035,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146
+    },
+    "Smith": {
+      "mae_future": 0.11176060140132904,
+      "rmse_future": 0.16535629332065582,
+      "jitter": 1.7108495235443115,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146
+    },
+    "Prediction Only": {
+      "mae_future": 0.03602679818868637,
+      "rmse_future": 0.04396083950996399,
+      "jitter": 1.706849217414856,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146
+    },
+    "Ours": {
+      "mae_future": 0.03602679818868637,
+      "rmse_future": 0.04396083950996399,
+      "jitter": 1.706849217414856,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146
+    }
+  },
+  "module_ablation": {
+    "Full model": {
+      "mae_future": 0.03602679818868637,
+      "rmse_future": 0.04396083950996399,
+      "jitter": 1.706849217414856,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146,
+      "params": 26306
+    },
+    "w/o temporal attention": {
+      "mae_future": 0.040047332644462585,
+      "rmse_future": 0.046065278351306915,
+      "jitter": 1.7067463397979736,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146,
+      "params": 19458
+    },
+    "w/o causal conv": {
+      "mae_future": 0.028634199872612953,
+      "rmse_future": 0.03184991702437401,
+      "jitter": 1.7067071199417114,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146,
+      "params": 13890
+    },
+    "w/o branch split": {
+      "mae_future": 0.0451127327978611,
+      "rmse_future": 0.05285794660449028,
+      "jitter": 1.7062668800354004,
+      "spike_rate": 0.0,
+      "sign_flip": 0.003778337531486146,
+      "params": 35458
+    }
+  },
+  "dataset_summary": {
+    "raw_rows": 9451,
+    "segment_lengths": [
+      4984,
+      318,
+      45,
+      2657,
+      1041,
+      406
+    ],
+    "segment_count": 6,
+    "train_seq": 31888,
+    "val_seq": 1033,
+    "test_seq": 398,
+    "history_len": 8,
+    "feature_dim": 4
+  }
+}

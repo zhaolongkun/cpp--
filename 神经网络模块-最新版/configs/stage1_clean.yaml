@@ -1,0 +1,94 @@
+﻿model:
+  name: dual_state
+  input_dim: 20
+  stem_dim: 64
+  state_dim: 64
+  dropout: 0.10
+  norm_type: groupnorm
+  groupnorm_groups: 8
+  residual_on_input: true
+  switch_gate_mode: explicit
+  explicit_gate_switch_weight: 0.45
+  explicit_gate_turn_weight: 0.35
+  explicit_gate_lost_weight: 0.08
+  explicit_gate_coast_weight: 0.10
+  explicit_gate_zoom_weight: 0.00
+  explicit_gate_jitter_weight: 0.10
+  explicit_gate_jitter_scale: 1.50
+  explicit_gate_threshold: 0.50
+  explicit_gate_temperature: 0.08
+  recover_residual_cap_enabled: true
+  recover_residual_cap_value: 8.0
+  recover_residual_min_scale: 0.35
+  recover_residual_trigger_threshold: 0.45
+  residual_base_gain: 0.0
+  residual_gate_gain: 0.60
+  lead_enabled: false
+  future_head: false
+  velocity_head: false
+
+train:
+  epochs: 30
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.00001
+  seed: 44
+  device: auto
+
+loss:
+  clean_weight: 1.0
+  smooth_weight: 0.01
+  turn_weight: 0.16
+  delta_weight: 0.12
+  peak_weight: 0.10
+  peak_margin: 0.85
+  event_recon_boost: 0.75
+  gate_align_weight: 0.0
+  gate_sparse_weight: 0.0
+
+teacher:
+  trend_alpha: 0.20
+  jitter_ema_alpha: 0.45
+  rolling_median_win: 5
+  stable_dx_hat_weight: 0.55
+  stable_trend_weight: 0.45
+  stable_event_threshold: 0.25
+  stable_zoom_threshold: 0.20
+  jitter_raw_weight: 0.35
+  jitter_dx_hat_weight: 0.10
+  jitter_ema_weight: 0.35
+  jitter_median_weight: 0.20
+  recover_lost_last_good_weight: 0.90
+  recover_lost_trend_weight: 0.10
+  recover_target_dx_hat_weight: 0.05
+  recover_target_ema_weight: 0.55
+  recover_target_raw_weight: 0.40
+  recover_ramp_step: 0.15
+  recover_lost_threshold: 0.50
+  recover_coast_threshold: 0.00
+  reliable_dx_hat_weight: 0.25
+  reliable_ema_weight: 0.40
+  reliable_median_weight: 0.35
+  turn_raw_weight: 0.65
+  turn_dx_hat_weight: 0.05
+  turn_ema_weight: 0.30
+  turn_threshold: 0.60
+  switch_threshold: 0.60
+
+prefilter:
+  enabled: true
+  mode: sma
+  window: 3
+
+eval:
+  gate_active_threshold: 0.50
+
+data_selection:
+  validation_summary_json: D:/kun-data/kun-code-data/反无/cpp智能控制/神经网络模块-最新版/outputs/stage1_tag_validation_summary.json
+  allowed_decisions:
+    - keep
+    - keep_but_review
+
+paths:
+  dataset_npz: D:/kun-data/kun-code-data/反无/cpp智能控制/神经网络模块-最新版/data/run01/stage1_clean_dataset.npz
+  out_dir: D:/kun-data/kun-code-data/反无/cpp智能控制/神经网络模块-最新版/outputs/stage1_clean

@@ -1,0 +1,64 @@
+<mxfile host="65bd71144e">
+    <diagram id="model-architecture" name="Page-1">
+        <mxGraphModel dx="1340" dy="1394" grid="0" gridSize="10" guides="0" tooltips="1" connect="1" arrows="0" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Model Architecture: Causal CNN + GRU" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=26;fontStyle=1;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="450" y="18" width="900" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="input" value="Input Sequence&lt;br&gt;[batch, seq_len=8, features=4]&lt;br&gt;[e_ref_x, e_ref_y, d_ref_x, d_ref_y]" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#DCEBFA;strokeColor=#111111;strokeWidth=2.8;fontStyle=1;fontSize=18;fontFamily=Helvetica;align=center;verticalAlign=middle;spacing=4;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="80" width="345" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="conv1" value="Causal Conv1D&lt;br&gt;channels=32, kernel=3&lt;br&gt;dilation=1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#F6E7E7;strokeColor=#111111;strokeWidth=2.8;fontSize=16;fontFamily=Helvetica;align=center;verticalAlign=middle;spacing=4;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="507.5" y="260" width="210" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="conv2" value="Causal Conv1D&lt;br&gt;channels=32, kernel=3&lt;br&gt;dilation=2" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#F6E7E7;strokeColor=#111111;strokeWidth=2.8;fontSize=16;fontFamily=Helvetica;align=center;verticalAlign=middle;spacing=4;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="512.5" y="420" width="200" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="relu1" value="ReLU" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FBF5DF;strokeColor=#111111;strokeWidth=1.8;fontSize=14;fontFamily=Helvetica;align=center;verticalAlign=middle;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="752.5" y="287" width="70" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="relu2" value="ReLU" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FBF5DF;strokeColor=#111111;strokeWidth=1.8;fontSize=14;fontFamily=Helvetica;align=center;verticalAlign=middle;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="752.5" y="447" width="70" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="gru" value="GRU Layer&lt;br&gt;hidden_dim=64&lt;br&gt;batch_first=True" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#DFF0D8;strokeColor=#111111;strokeWidth=2.8;fontStyle=1;fontSize=16;fontFamily=Helvetica;align=center;verticalAlign=middle;spacing=4;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="517.5" y="585" width="190" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="fc" value="Fully Connected&lt;br&gt;Linear(64 -&gt; 2)" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#EEDFF2;strokeColor=#111111;strokeWidth=2.8;fontSize=14;fontFamily=Helvetica;align=center;verticalAlign=middle;spacing=4;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="740" width="145" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="output" value="Output&lt;br&gt;[batch, 2]&lt;br&gt;[Delta_x, Delta_y]" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#DFF0D8;strokeColor=#111111;strokeWidth=2.8;fontStyle=1;fontSize=16;fontFamily=Helvetica;align=center;verticalAlign=middle;spacing=4;shadow=1;" parent="1" vertex="1">
+                    <mxGeometry x="530" y="865" width="165" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="details_title" value="Model Details:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="1016" y="78.5" width="260" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="details_text" value="&amp;bull; Total Parameters: 22.3K&lt;br&gt;&lt;br&gt;&amp;bull; Inference Time: &lt;1 ms&lt;br&gt;&lt;br&gt;&amp;bull; Causal: no future info&lt;br&gt;&lt;br&gt;&amp;bull; Lightweight: real-time" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=17;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="1006" y="168.5" width="360" height="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="loss_title" value="Loss Function:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="1016" y="523.5" width="260" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="loss_text" value="L = L_pred + 0.05*L_mag&lt;br&gt;      + 0.1*L_dir&lt;br&gt;&lt;br&gt;&amp;bull; L_pred: Huber loss&lt;br&gt;&lt;br&gt;&amp;bull; L_mag: |Delta|_1&lt;br&gt;&lt;br&gt;&amp;bull; L_dir: Direction penalty" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=17;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="1016" y="613.5" width="390" height="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#111111;" parent="1" source="input" target="conv1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#111111;" parent="1" source="conv1" target="conv2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#111111;" parent="1" source="conv2" target="gru" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#111111;" parent="1" source="fc" target="output" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#111111;" parent="1" source="gru" target="fc" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

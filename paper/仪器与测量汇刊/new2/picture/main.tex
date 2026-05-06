@@ -1,0 +1,423 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{amsmath,amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{array}
+\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{textcomp}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{booktabs}
+\usepackage{xeCJK}
+\usepackage{float}
+\usepackage{placeins}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Courier New}
+\setCJKmainfont{SimSun}[BoldFont=SimHei,ItalicFont=KaiTi,SmallCapsFont=SimSun]
+\setCJKsansfont{SimHei}
+\setCJKmonofont{SimSun}
+\raggedbottom
+
+\begin{document}
+
+\title{面向视觉伺服反无人机系统时延补偿的轻量时序网络超前控制信号预测方法}
+
+\author{赵龙坤%
+\thanks{稿件收到日期：2026年X月X日；修订日期：2026年X月X日。}}
+
+\markboth{IEEE Transactions on Control Systems Technology,~Vol.~XX, No.~X, XXXX~2026}%
+{作者等: 面向视觉伺服反无人机系统时延补偿的超前控制信号预测方法}
+
+\maketitle
+
+\begin{abstract}
+在视觉伺服反无人机系统中，从摄像头采集图像到目标检测算法输出无人机目标框通常存在固有的视觉处理时延，典型情况下约为一帧时间。该时延主要来自图像采集、传输与检测推理链路，会使控制器获得的控制信息落后于目标真实运动。本文将任务定义为严格因果条件下的 legacy control signal 一帧超前预测：输入历史旧控制输出序列，直接输出下一时刻可供控制器使用的二维控制信号。具体而言，本文以旧控制链在真实系统中用于驱动电机的二维控制输出 \texttt{first\_filter\_dx}/\texttt{first\_filter\_dy} 作为 legacy control signal；该信号由检测框中心坐标经卡尔曼滤波获得平滑位置估计后，与摄像头图像中心坐标做差，再经过阶跃限幅和低通滤波得到。上述旧控制链能够有效抑制检测框大小跳变导致的中心坐标波动，但仍保留约一帧的固有时延，使电机响应难以及时跟随目标变化。针对这一问题，本文通过端到端轻量时序网络直接学习 legacy control signal 的下一帧输出。网络由 X/Y 双流因果卷积、GRU、可选因果注意力以及状态转移参数化输出头组成，并通过联合损失同时约束前瞻精度、增量一致性、稳定性与方向一致性。实验表明，所提方法能够在保持实时性的同时提升对下一帧控制目标的逼近能力，并在平稳性与前瞻性之间取得较好的折中。
+\end{abstract}
+
+\begin{IEEEkeywords}
+视觉伺服反无人机系统，时延补偿，端到端预测，时序建模
+\end{IEEEkeywords}
+
+\section{引言}
+视觉伺服反无人机系统是跟踪拦截系统中的关键组成部分，在反无人机场景中尤为重要\cite{chaumette2006visual,hutchinson1996tutorial,corke2011robotics}。系统通常根据目标在图像中的位置变化生成控制指令，因此感知信息是否及时、稳定，会直接影响云台或电机的跟踪效果。本文关注的基础观测量来自目标检测算法输出的无人机检测框中心坐标；在实际系统中，并不直接将该中心坐标偏差送入执行端，而是先对检测框中心坐标进行卡尔曼滤波，得到平滑位置估计和速度估计，再与摄像头图像中心坐标做差，并经过阶跃限幅与低通滤波形成较稳定的旧控制信号\cite{yilmaz2006object,redmon2016you}。从视觉感知角度看，Faster R-CNN、YOLOv4 和 DETR 等目标检测框架，以及以 ResNet 为代表的深度特征提取网络，为小目标检测与跟踪提供了重要基础\cite{he2016deep,ren2015faster,bochkovskiy2020yolov4,carion2020detr}；面向低空无人机感知与反制的中文综述也对相关技术路线进行了系统梳理\cite{cao2022survey_cn,leng2023droneview_cn}。这一链路能够有效抑制检测框大小跳变引起的中心坐标波动，但在反无人机场景中\cite{shi2021anti}，检测抖动、漏检与环境扰动仍会放大控制难度。
+
+在实际视觉伺服反无人机系统链路中，控制器当前时刻能够获得的旧控制信号已经经历了相机采图、数据传输、检测推理以及后续平滑整形处理，因此相对于目标真实运动通常存在约一帧的固有滞后。该滞后会使控制量在动态场景下落后于目标变化趋势，造成电机响应跟不上摄像头检测到的目标变化，进而带来响应速度下降与跟踪精度退化。对于快速机动的小目标，这种一帧级时延虽然绝对量不大，但会显著影响电机控制效果。
+
+针对时延和噪声问题，现有方法通常从滤波平滑、状态估计或模型补偿等方向展开。滑动平均与卡尔曼滤波\cite{kalman1960new,welch1995introduction}可改善信号波动，但其主要目标是噪声抑制而非直接生成下一时刻控制信号。Smith 预测器\cite{smith1957closer}和模型预测控制\cite{camacho2013model}虽然能够处理时延问题，但往往依赖较准确的系统模型；对于视觉伺服反无人机系统而言，视觉处理链路、目标运动和环境扰动共同作用，使精确建模较为困难。
+
+近年来，深度学习在时间序列预测中取得了显著进展\cite{lecun2015deep}。循环神经网络如 LSTM\cite{hochreiter1997long} 和 GRU\cite{cho2014learning} 能够捕获时序依赖，时序卷积网络（TCN）\cite{bai2018empirical}则通过因果卷积实现高效建模。然而，若将视觉伺服反无人机系统中的控制预测问题简单视为一般未来值预测，模型容易只追求数值拟合，而忽略控制所要求的平滑性、方向一致性和实时部署约束。因此，本文关注的问题不是离线重建某个参考信号，而是在严格因果条件下直接生成下一帧控制信号。
+
+基于上述背景，本文提出一种面向视觉伺服反无人机系统时延补偿的端到端时序预测方法。其核心思想是：直接利用旧控制链历史输出序列，学习从当前时刻到下一时刻 legacy control signal 的因果映射。本文的主要贡献如下：(1) 将视觉伺服反无人机系统中的一帧时延补偿问题重新表述为 one-step-ahead prediction of legacy control signal，突出控制应用中的前瞻性与可部署性；(2) 设计轻量双流因果时序网络，分别建模 $x$、$y$ 两轴历史控制状态及其一、二阶差分变化，并引入可选质量分支；(3) 采用 state-transition parameterized output 与稳定性约束联合损失，提升预测结果的控制友好性；(4) 在真实视觉伺服反无人机系统数据上验证所提方法的有效性，并与 Last Value、Linear Extrapolation、Kalman CV 和 GRU Direct baseline 进行对比。
+
+\section{相关工作}
+
+\subsection{时延补偿方法}
+控制系统中的时延补偿是一个经典问题。Smith 预测器\cite{smith1957closer}通过构建系统模型来预测未来状态，但需要精确的系统动态模型。模型预测控制（MPC）\cite{camacho2013model}通过优化未来时域内的控制序列来处理时延，但计算复杂度较高，难以满足视觉伺服反无人机系统的实时性要求。围绕显式时滞补偿、约束 MPC 以及带饱和环节的控制对象，已有综述和中文研究给出了较系统的分析\cite{normey2009taking,xi2013mpc_cn,li2006saturatedmpc_cn,chen2007timedelaympc_cn}。这些基于模型的方法在视觉伺服反无人机场景中面临挑战，因为视觉处理链路、目标运动和环境扰动都具有较强复杂性，难以建立精确模型。
+
+\subsection{信号滤波与状态估计}
+卡尔曼滤波\cite{kalman1960new,welch1995introduction}是噪声抑制与状态估计中的经典方法，其核心思想是基于状态空间模型对系统状态进行递推估计。在本文关注的视觉伺服反无人机场景中，卡尔曼滤波可用于抑制检测框中心坐标波动，并获得较平滑的位置与速度估计，为后续控制信号构造提供稳定输入。然而，若仅将卡尔曼滤波或简单平滑方法作为时延补偿手段，其作用主要体现在观测去噪与短时状态估计，而难以直接消除由图像采集、数据传输、目标检测推理及后续整形环节共同带来的固有时延。尤其在目标机动、检测误差与环境扰动同时存在时，固定状态模型与参数整定容易与真实过程不匹配，因此仅依靠这类方法仍难以直接生成满足执行需求的前瞻控制信号。
+
+\subsection{深度学习时序预测}
+近年来，深度学习在时序预测任务中取得了显著进展\cite{lecun2015deep}。在工程控制实现中，经典 PID 及其改进策略仍然是构建稳定控制链的重要手段\cite{liu2003advancedpid}。循环神经网络如 LSTM\cite{hochreiter1997long} 和 GRU\cite{cho2014learning}能够捕获长期依赖关系，广泛应用于时间序列预测。时序卷积网络（TCN）\cite{bai2018empirical}通过因果卷积和膨胀卷积实现了高效的时序建模，在多个基准测试中超越了传统 RNN。除上述结构外，WaveNet\cite{oord2016wavenet}、DA-RNN\cite{qin2017darnn}、Temporal Fusion Transformer\cite{lim2021tft} 以及基于自注意力的 Transformer\cite{vaswani2017attention} 也已被用于序列建模，相关综述工作\cite{wen2023transformers}进一步总结了其在时间序列预测中的适用性与局限。然而，将这些通用结构直接用于视觉伺服反无人机系统时，仍需要考虑输出是否满足控制友好性、实时性和因果部署等约束。本文的目标不是恢复某个抽象参考量，而是直接学习“历史旧控制输出序列 $\rightarrow$ 下一帧 legacy control signal”的映射，因此在网络结构与损失设计上都围绕这一目标展开。
+
+\section{问题描述}
+
+\subsection{信号定义}
+原始检测框中心坐标容易受到检测框大小跳变、漏检以及环境扰动影响，从而产生明显波动。为获得更稳定的控制输入，实际系统首先对目标检测结果进行二维卡尔曼滤波。设时刻 $t$ 经卡尔曼滤波后得到的平滑检测框中心坐标和速度估计分别为
+\begin{equation}
+\hat{c}(t) = [\hat{x}_c(t), \hat{y}_c(t)]^T,\quad
+\hat{v}(t) = [\hat{v}_x(t), \hat{v}_y(t)]^T.
+\end{equation}
+随后将滤波后坐标与摄像头图像中心坐标 $c_{cam}=[x_{cam}, y_{cam}]^T$ 相减，得到较稳定的位置偏差
+\begin{equation}
+e_f(t) = \hat{c}(t) - c_{cam} = [e_x(t), e_y(t)]^T.
+\end{equation}
+其中 $e_x(t)>0$ 和 $e_x(t)<0$ 分别表示目标位于图像中心右侧和左侧，$e_y(t)>0$ 和 $e_y(t)<0$ 分别表示目标位于图像中心上方和下方。该步骤能够在保留目标相对位置信息的同时抑制检测抖动，并提供辅助速度估计 $\hat{v}_x,\hat{v}_y$。
+
+为进一步抑制偶发跳变，对 $e_f(t)$ 施加阶跃限幅（step clamp），将每一轴相邻帧变化幅度限制在不超过 $k_{\max}$（工程实现中对应常量 \texttt{kMaxStepPx}）：
+\begin{equation}
+\tilde{e}(t)=\tilde{e}(t-1)+\mathrm{clip}\!\left(e_f(t)-\tilde{e}(t-1),-k_{\max},k_{\max}\right),
+\end{equation}
+其中 $\mathrm{clip}(\cdot)$ 按轴逐元素作用。再对 $\tilde{e}(t)$ 进行低通滤波，得到旧控制链输出
+\begin{equation}
+u_{\mathrm{legacy}}(t)=[u_x^{L}(t),u_y^{L}(t)]^T=\mathrm{LPF}(\tilde{e}(t)).
+\end{equation}
+日志字段 \texttt{first\_filter\_dx} 和 \texttt{first\_filter\_dy} 即对应 $u_{\mathrm{legacy}}(t)$ 的两个通道。该序列在工程上能够有效抑制检测框大小跳变导致的中心坐标波动并保持较好的平滑性，但同时保留了视觉处理链路带来的约一帧固有时延。
+
+在本文中，我们不再将任务定义为恢复某个抽象参考信号，而是直接对旧控制链输出进行一帧前瞻预测。本文的目标是在严格因果条件下，根据 $u_{\mathrm{legacy}}(t)$ 的历史序列直接预测下一帧控制输出 $\hat{u}_{\mathrm{legacy}}(t+1)$。
+
+\subsection{一帧时延问题}
+在视觉伺服反无人机系统中，控制器当前时刻能够获得的是由第 $t$ 帧检测结果经卡尔曼滤波、阶跃限幅和低通滤波后生成的 $u_{\mathrm{legacy}}(t)$。尽管该信号相对稳定，但其形成过程已经包含相机采图、数据传输、目标检测推理以及信号平滑整形等环节，因此相对于目标真实运动通常存在约一帧的固有滞后。这一滞后导致电机响应难以及时跟随摄像头检测到的目标变化，是系统动态响应变慢的主要来源。
+
+当前系统相机工作在 30\,FPS，对应单帧周期约为 33\,ms。结合系统链路分析，摄像头从采集图像到最终生成电机控制命令的综合时延约为 50\,ms。本文方法采用一帧前瞻预测，即在时刻 $t$ 直接生成 $\hat{u}_{\mathrm{legacy}}(t+1)$，相当于提前补偿约 33\,ms 的控制量，因此可将有效控制滞后由约 50\,ms 降低到约 $50-33=17$\,ms，使剩余时延落在单帧周期范围内，从而更有利于保证一帧一控制条件下的实时性与有效性。
+
+对于一帧时延问题，本文的任务是在时刻 $t$ 利用当前及历史可获得信息直接生成
+\begin{equation}
+\hat{u}_{\mathrm{legacy}}(t+1),
+\end{equation}
+使其尽可能逼近真实的下一帧旧控制链输出 $u_{\mathrm{legacy}}(t+1)$。具体而言，期望输出满足：
+\begin{itemize}
+\item 尽量逼近下一帧旧控制链输出 $u_{\mathrm{legacy}}(t+1)$，从而补偿一帧滞后；
+\item 降低相对未来控制输出的预测误差，提升闭环跟踪精度；
+\item 保持较好的输出平滑性，避免对电机造成明显控制突变；
+\item 仅使用当前及过去已经获得的信息进行严格因果操作。
+\end{itemize}
+
+\section{所提方法}
+
+\subsection{方法概述}
+本文方法采用端到端一帧超前控制信号生成框架：在整体链路上，目标检测输出的检测框中心坐标先经卡尔曼滤波获得平滑位置估计和速度估计，再与摄像头图像中心做差，并经过 step clamp 和低通滤波生成稳定但滞后的 $u_{\mathrm{legacy}}(t)$；随后，给定长度为 $T$ 的历史控制相关序列，网络直接输出下一时刻二维控制信号。方法包含三个组成部分：(1) 旧控制链生成与历史状态、差分特征构造；(2) X/Y 双流轻量因果时序编码与可选质量分支；(3) state-transition parameterized output 与稳定性约束损失。图\ref{fig:method_overview}展示了方法总体框架。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.95\textwidth]{picture/方法总体框架-1.png}
+\caption{旧控制链生成与端到端一帧超前控制信号预测框架}
+\label{fig:method_overview}
+\end{figure*}
+
+如图\ref{fig:method_overview}所示，本文整体框架可分为前后衔接的两级处理。前一级为旧控制链生成过程：检测框中心坐标先经卡尔曼滤波获得平滑位置和速度估计，再与摄像头中心做差，并经过阶跃限幅和低通滤波得到稳定但滞后的 $u_{\mathrm{legacy}}(t)$。后一级为端到端时序预测过程：以长度为 $T$ 的历史控制相关特征序列为输入，经双流因果时序编码和状态转移参数化输出头，直接生成下一帧预测控制信号 $\hat{u}_{\mathrm{legacy}}(t+1)$。
+
+\subsection{时序预测网络}
+我们采用轻量网络直接生成下一帧旧控制链输出：
+\begin{equation}
+\hat{u}_{\mathrm{legacy}}(t+1)=f_\theta(\mathbf{x}_{t-T+1:t}), \quad T=16.
+\end{equation}
+其中每个时刻的输入特征定义为
+\begin{equation}
+\mathbf{x}_i = [f_x(i),f_y(i),d_x(i),d_y(i),dd_x(i),dd_y(i),q(i)].
+\end{equation}
+其中
+\begin{equation}
+\begin{aligned}
+f_x(i)&=u_x^{L}(i),\\
+f_y(i)&=u_y^{L}(i),\\
+d_x(i)&=f_x(i)-f_x(i-1),\\
+d_y(i)&=f_y(i)-f_y(i-1),\\
+dd_x(i)&=d_x(i)-d_x(i-1),\\
+dd_y(i)&=d_y(i)-d_y(i-1),
+\end{aligned}
+\end{equation}
+$q(i)$ 表示可选质量特征，具体为
+\begin{equation}
+q(i)=[\mathrm{conf}(i), \log(\mathrm{area}(i)+1), \mathrm{miss\_flag}(i), dt(i)].
+\end{equation}
+当不启用质量分支时，模型输入仅保留控制相关的 6 维基础特征，即 $f_x(i),f_y(i),d_x(i),d_y(i),dd_x(i),dd_y(i)$，不再使用质量特征 $q(i)$。
+
+网络采用双流结构，将基础输入按轴分离：X 流输入 $[f_x, d_x, dd_x]$，Y 流输入 $[f_y, d_y, dd_y]$。由于 $x$、$y$ 两轴的运动模式相对独立，分流建模可避免轴间特征相互干扰。每一流均由两层因果卷积、GRU 以及可开关的因果注意力组成；若启用质量分支，则额外使用线性层和 GRU 对 $q(i)$ 进行编码。最终将 $h_x$、$h_y$ 与可选的 $h_q$ 拼接后送入输出头。
+
+每条流的模块连接关系为：
+\begin{equation}
+\begin{aligned}
+\text{Input} &\xrightarrow{\text{CausalConv}(d=1)} \xrightarrow{\text{CausalConv}(d=2)} \\
+&\xrightarrow{\text{GRU}} \xrightarrow{\text{CausalAttn}} h_{\mathrm{last}}.
+\end{aligned}
+\end{equation}
+
+网络架构如图\ref{fig:model_architecture}所示，各模块作用如下：
+\begin{itemize}
+\item \textbf{双流运动编码}：每流使用 \texttt{CausalConv1d(3$\rightarrow$32, $k=3$, $d=1$)}、\texttt{CausalConv1d(32$\rightarrow$32, $k=3$, $d=2$)} 和 \texttt{GRU(32$\rightarrow$32)}，用于提取单轴局部与长程动态模式；
+\item \textbf{可选因果注意力}：在每流 GRU 输出上施加带上三角掩码的多头自注意力，使模型更关注与当前一步预测相关的历史时刻；
+\item \textbf{质量分支}：对 $[\mathrm{conf}, \log(\mathrm{area}+1), \mathrm{miss\_flag}, dt]$ 采用 \texttt{Linear(4$\rightarrow$16)+GRU(16$\rightarrow$16)} 编码，在低质量观测或时序不连续时补充状态信息；
+\item \textbf{状态转移参数化输出}：融合特征先经过共享融合层，再由 \textit{delta head} 输出 $z_t\in\mathbb{R}^2$，由 \textit{gate head} 输出 $g_t\in[0,1]^2$，最终通过有界状态转移得到预测控制信号。
+\end{itemize}
+
+输出头采用如下形式：
+\begin{equation}
+\Delta \hat{u}_t = g_t \odot (r_{\max}\odot \tanh(z_t)),
+\end{equation}
+\begin{equation}
+\hat{u}_{\mathrm{legacy}}(t+1)=u_{\mathrm{legacy}}(t)+\Delta \hat{u}_t,
+\end{equation}
+其中 $r_{\max}$ 表示每个轴单步最大变化幅值。该设计能够在保持端到端输出形式的同时，显式限制单步变化范围，增强控制可部署性。当前完整模型总参数量为 39\,284。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.95\textwidth]{picture/模型.png}
+\caption{模型架构}
+\label{fig:model_architecture}
+\end{figure*}
+
+图\ref{fig:model_architecture}进一步展示了所提网络的内部结构。基础控制特征按轴划分为 X/Y 两条分支，分别通过因果卷积、GRU 和可选因果注意力提取时序表示；质量特征 $q(i)$ 则通过独立质量分支进行编码。随后，各分支特征在融合层中拼接，并由状态转移参数化输出头生成受单步变化范围约束的预测控制信号。
+
+模型训练目标为
+\begin{equation}
+u^{target}(t+1)=u_{\mathrm{legacy}}(t+1).
+\end{equation}
+
+\subsection{损失函数}
+为了同时优化一帧前瞻精度、状态转移一致性与控制友好性，训练目标定义为
+\begin{equation}
+\mathcal{L}=\lambda_1\mathcal{L}_{ahead}+\lambda_2\mathcal{L}_{inc}+\lambda_3\mathcal{L}_{stab}+\lambda_4\mathcal{L}_{dir}+\lambda_5\mathcal{L}_{gate}.
+\end{equation}
+
+其中，
+\begin{equation}
+\mathcal{L}_{ahead}=\mathrm{Huber}\!\left(\hat{u}_{\mathrm{legacy}}(t+1),u_{\mathrm{legacy}}(t+1)\right)
+\end{equation}
+用于约束下一帧预测值与真实值之间的误差；
+\begin{equation}
+\begin{aligned}
+\mathcal{L}_{inc} &= \Big\|\big(\hat{u}_{\mathrm{legacy}}(t+1)-u_{\mathrm{legacy}}(t)\big) \\
+&\quad - \big(u_{\mathrm{legacy}}(t+1)-u_{\mathrm{legacy}}(t)\big)\Big\|_1
+\end{aligned}
+\end{equation}
+用于约束预测增量与真实单步变化保持一致；
+\begin{equation}
+\begin{aligned}
+m_t &= \left\|u_{\mathrm{legacy}}(t)-u_{\mathrm{legacy}}(t-1)\right\|_1,\\
+w_t &= \exp(-m_t/\tau),\\
+\mathcal{L}_{stab} &= w_t \left\|\hat{u}_{\mathrm{legacy}}(t+1)-u_{\mathrm{legacy}}(t)\right\|_1
+\end{aligned}
+\end{equation}
+用于在低运动场景下抑制不必要的跳变；
+\begin{equation}
+\begin{aligned}
+\mathcal{L}_{dir} = \max\!\Big(0,&-\big(\hat{u}_{\mathrm{legacy}}(t+1)-u_{\mathrm{legacy}}(t)\big) \\
+&\cdot \big(u_{\mathrm{legacy}}(t+1)-u_{\mathrm{legacy}}(t)\big)\Big)
+\end{aligned}
+\end{equation}
+用于鼓励预测变化方向与真实变化方向保持一致；
+\begin{equation}
+\mathcal{L}_{gate}=\|g_t\|_1
+\end{equation}
+用于抑制无必要的大门控输出。实验中采用 $\lambda_1=1.0,\lambda_2=0.5,\lambda_3=0.1,\lambda_4=0.1,\lambda_5=0.01$，$\tau=12.0$。
+
+上述损失设计体现了本文方法的核心目标：模型并非仅仅追求数值上逼近未来目标，还需要输出更适合实际控制链使用的平滑、方向一致且受限的前瞻控制信号。
+
+\subsection{部署说明}
+在线部署时，模型直接读取最近 $T$ 帧的历史控制相关特征序列并输出下一帧二维控制信号，无需额外构造附加中间状态。若系统执行端存在幅值范围约束或帧间变化率约束，可在推理后增加与电机接口一致的饱和限制和 slew-rate limiter，但该步骤属于执行器侧安全约束，而非本文方法主体的一部分。
+
+\section{实验设置}
+
+\subsection{实验平台}
+本文实验基于二维转台视觉伺服反无人机系统进行。如图\ref{fig:platform}所示，系统由二维云台、视觉传感器和控制单元组成。云台提供俯仰和方位两个自由度的运动控制，视觉传感器实时采集目标图像，目标检测算法输出无人机检测框中心坐标。旧控制链首先对检测框中心坐标进行二维卡尔曼滤波，得到平滑位置估计和速度估计；随后将其与摄像头图像中心坐标做差，并经阶跃限幅和低通滤波生成 legacy control signal。该平台能够模拟反无人机场景中的视觉伺服反无人机系统运行过程，为算法验证提供真实的硬件环境。
+
+图\ref{fig:platform}给出了实验平台的实物构成与连接关系。图中包含视觉采集端、二维转台执行机构以及控制计算单元，反映了本文方法是在真实硬件闭环环境中验证的，而非仅在离线数据上分析。目标检测输出先经旧控制链转换为稳定但滞后的 legacy control signal，再由时序预测模型直接生成一帧超前控制信号，最后发送给电机控制链。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.45\textwidth]{picture/platform.png}
+\caption{二维转台视觉伺服反无人机实验平台}
+\label{fig:platform}
+\end{figure}
+
+\subsection{数据集}
+实验数据来源于实际部署系统生成的数据日志文件，文件名为 \path{track-fusion-move-baseline_new.csv}。
+
+其中，\path{first_filter_dx} 和 \path{first_filter_dy} 表示旧控制链在真实系统中用于驱动电机的二维控制输出；该输出由检测框中心坐标经卡尔曼滤波、相机中心差分、step clamp 和低通滤波后得到。本文将其统一定义为 legacy control signal / historical control output，并以其下一帧值作为监督目标。
+
+表I所示完整数据共包含 9451 条记录，覆盖 6 条轨迹；采用长度 $T=16$ 的滑动窗口构造样本后，共得到 9435 个有效样本，并按时间顺序划分为 6604 个训练样本、1415 个验证样本和 1416 个测试样本。如表\ref{tab:dataset}所示，总记录数、有效样本数以及训练集、验证集和测试集的划分情况均在表中进行了汇总。
+
+\begin{table}[H]
+\centering
+\caption{数据集统计}
+\label{tab:dataset}
+\begin{tabular}{lc}
+\toprule
+\textbf{Item} & \textbf{Value} \\
+\midrule
+Total records & 9451 \\
+Effective samples & 9435 \\
+Training set & 6604 (70\%) \\
+Validation set & 1415 (15\%) \\
+Test set & 1416 (15\%) \\
+History length $T$ & 16 frames \\
+Feature dimension & 10 (6 base + 4 quality) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{实现细节}
+模型使用 PyTorch 实现，采用 AdamW 优化器，学习率 $10^{-3}$，权重衰减 $10^{-4}$，批大小 64。历史窗口长度设为 $T=16$，启用质量分支与因果注意力，注意力头数为 4，dropout 为 0.1。状态转移输出中 $r_{\max}=[12,12]$。训练轮数设为 500，并根据验证集 Ahead MAE 保存最佳 checkpoint。损失权重设置为 $\lambda_1=1.0$，$\lambda_2=0.5$，$\lambda_3=0.1$，$\lambda_4=0.1$，$\lambda_5=0.01$，$\tau=12.0$。为评估部署效率，本文进一步在当前实验电脑上对最终模型进行了单样本前向推理测试。测试平台配置为 Intel Core i7-14700KF 处理器、NVIDIA GeForce RTX 4070 Ti SUPER 16\,GB 显卡以及 32\,GB 系统内存；在 batch size 为 1、输入长度 $T=16$ 的条件下，最终 DSCGNet 配置的平均前向推理耗时在 GPU 上约为 1.50\,ms，在 CPU 上约为 1.70\,ms，对应推理频率分别约为 664.68\,Hz 和 588.56\,Hz。上述统计仅包含模型前向推理，不含图像采集与目标检测推理时间，但其计算开销相对于常见视觉处理链路的一帧时间尺度已经较小，说明所提模型具有较好的实时部署能力。
+
+\subsection{评估指标}
+由于本文任务定义为 one-step-ahead prediction of legacy control signal，因此以真实下一帧旧控制链输出 $u_{\mathrm{legacy}}(t+1)$ 作为监督目标和评估参考。采用如下指标：
+\begin{itemize}
+\item \textbf{Ahead MAE}：$\frac{1}{N}\sum \|\hat{u}_{\mathrm{legacy}}(t+1)-u_{\mathrm{legacy}}(t+1)\|_1$，衡量下一帧预测精度；
+\item \textbf{Ahead RMSE}：对预测误差的均方根统计，用于反映大误差样本的影响；
+\item \textbf{抖动}：相邻预测增量之间的平均变化幅度，用于量化输出平滑度；
+\item \textbf{突变率}：相邻预测输出差值超过阈值的帧比例；
+\item \textbf{符号翻转率}：预测增量与真实单步变化在方向上不一致的比例。
+\end{itemize}
+
+\subsection{对比方法}
+为评估端到端一帧超前预测的效果，本文采用以下方法进行对比：
+\begin{itemize}
+\item \textbf{Last Value}：$\hat{u}(t+1)=u_{\mathrm{legacy}}(t)$；
+\item \textbf{Linear Extrapolation}：$\hat{u}(t+1)=2u_{\mathrm{legacy}}(t)-u_{\mathrm{legacy}}(t-1)$；
+\item \textbf{Kalman CV}：采用常速度状态模型的卡尔曼滤波器，在当前时刻完成状态更新后显式执行一步状态预测，输出 $\hat{u}(t+1)$；
+\item \textbf{GRU Direct}：使用单流 GRU 直接输出下一帧绝对控制信号；
+\item \textbf{DSCGNet}：本文所提双流因果卷积 + GRU + 可选因果注意力 + 状态转移参数化输出模型。
+\end{itemize}
+
+\section{结果与讨论}
+
+\subsection{主要对比}
+表\ref{tab:main_comparison}给出了基于当前真实实验结果的主要定量对比。
+
+{
+\setlength{\intextsep}{6pt}
+\setlength{\textfloatsep}{6pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
+\begin{table}[H]
+\centering
+\caption{主要方法对比（测试集）}
+\label{tab:main_comparison}
+{
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+\textbf{方法} & \textbf{Ahead MAE} & \textbf{Ahead RMSE} & \textbf{抖动} & \textbf{突变率} & \textbf{符号翻转率} \\
+\midrule
+Last Value & 1.7660 & 4.4408 & 0.0000 & 0.0212 & 1.0000 \\
+Linear Extrapolation & 0.3135 & 4.7372 & 0.3137 & 0.0247 & 0.0275 \\
+Kalman CV & 0.5643 & 6.0284 & 1.0566 & 0.0318 & 0.0307 \\
+GRU Direct & 2.7794 & 9.1456 & 0.5465 & 0.0170 & 0.2066 \\
+DSCGNet (本文方法) & \textbf{0.2157} & \textbf{3.3362} & 0.1903 & 0.0254 & \textbf{0.0258} \\
+\bottomrule
+\end{tabular}%
+}
+}
+\end{table}
+}
+
+由表\ref{tab:main_comparison}可见，解析型线性外推相较于 Last Value 显著降低了 Ahead MAE，但仍存在较大的预测波动；Kalman CV 作为经典状态估计基线，在 Ahead MAE 上优于 Last Value 和 GRU Direct，但其 Ahead RMSE 与抖动指标仍明显高于本文方法；GRU Direct 虽具有端到端形式，但在当前任务上精度与稳定性均明显弱于解析型外推。本文所提 DSCGNet 在 Ahead MAE 和 Ahead RMSE 上取得了最佳结果，同时保持较低的符号翻转率，说明基于双流因果时序编码和状态转移参数化输出的设计更适合 legacy control signal 的一帧前瞻预测。
+\FloatBarrier
+
+\subsection{测试集时序对比}
+图\ref{fig:test_prediction}展示了测试集动态片段上各方法对下一帧 legacy control signal 的预测结果，其中包含 DSCGNet、Linear Extrapolation、Kalman CV、Last Value 和 GRU Direct，并给出了局部放大图以突出关键区间的预测差异。上下两个子图分别对应 $x$ 和 $y$ 通道。可以看出，本文方法在整体趋势和局部变化上都与真实下一帧控制信号保持较高一致性。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.48\textwidth]{picture/new_capture_2026_04_17_600pts/interactive_inset.png}
+\caption{测试集动态片段上各方法下一帧控制信号预测结果对比及局部放大图}
+\label{fig:test_prediction}
+\end{figure}
+
+\subsection{模型结构细节}
+为补充模型结构分析，本文进一步在与主实验一致的训练集、验证集和测试集划分上，围绕历史长度 $T$、质量分支开关、因果注意力开关以及输出头形式开展消融实验，结果如表\ref{tab:ablation_results}所示。首先，在质量分支和因果注意力同时开启时，$T=16$ 取得最低 Ahead MAE（0.7374）和最低 Ahead RMSE（6.1753），说明该历史窗口长度在当前任务中具有更好的精度表现；相比之下，$T=20$ 的 Ahead MAE 上升到 1.0223，表明过长历史窗口可能引入冗余历史信息，而 $T=8$ 和 $T=12$ 虽然抖动略低，但整体前瞻精度仍不及 $T=16$。其次，开启质量分支后，Ahead MAE 由 1.0664 降至 0.8374，Ahead RMSE 由 6.3291 降至 6.2753，抖动也由 2.9568 降至 2.8361，说明检测置信度、目标尺度和时序连续性等质量信息能够有效提升前瞻预测精度与稳定性。再次，开启因果注意力后，Ahead MAE 由 0.7808 进一步降至 0.6374，Ahead RMSE 由 6.2778 降至 6.0753，抖动由 2.8614 降至 2.8166，说明该模块有助于模型更有效地利用与当前一步预测相关的历史信息。最后，输出头消融表明，若将状态转移参数化输出替换为直接回归输出，Ahead MAE 会由 0.8022 显著上升到 6.0408，Ahead RMSE 由 6.2583 上升到 11.9976，抖动也由 2.8491 增加到 3.6696，说明有界状态转移设计对控制信号预测的精度与稳定性具有关键作用。综合考虑精度、稳定性以及与整体方法描述的一致性，正文仍采用 $T=16$、开启质量分支和因果注意力、并使用状态转移参数化输出头的 DSCGNet 作为默认设置。表\ref{tab:model_architecture_detail}给出了该最终配置的详细结构。
+
+\begin{table}[H]
+\centering
+\caption{历史长度、质量分支、因果注意力与输出头消融结果（测试集）}
+\label{tab:ablation_results}
+{
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{0.98\columnwidth}{!}{%
+\begin{tabular}{llccc}
+\toprule
+\textbf{类别} & \textbf{设置} & \textbf{Ahead MAE} & \textbf{Ahead RMSE} & \textbf{抖动} \\
+\midrule
+历史长度 & $T=8$ & 0.8165 & 6.2868 & 2.8859 \\
+历史长度 & $T=12$ & 0.8827 & 6.2967 & 2.8780 \\
+历史长度 & $T=16$ & 0.7374 & 6.1753 & 2.9166 \\
+历史长度 & $T=20$ & 1.0223 & 6.2838 & 2.9334 \\
+质量分支 & 关闭 & 1.0664 & 6.3291 & 2.9568 \\
+质量分支 & 开启 & 0.8374 & 6.2753 & 2.8361 \\
+因果注意力 & 关闭 & 0.7808 & 6.2778 & 2.8614 \\
+因果注意力 & 开启 & 0.6374 & 6.0753 & 2.8166 \\
+输出头 & 直接回归输出 & 6.0408 & 11.9976 & 3.6696 \\
+输出头 & 状态转移参数化输出 & 0.8022 & 6.2583 & 2.8491 \\
+\bottomrule
+\end{tabular}
+}
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{所提 DSCGNet 的详细架构（质量分支开启）}
+\label{tab:model_architecture_detail}
+{
+\small
+\setlength{\tabcolsep}{2.5pt}
+\resizebox{0.90\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+\textbf{模块} & \textbf{配置} & \textbf{输出形状} & \textbf{参数量} \\
+\midrule
+X流输入 & $[f_x,d_x,dd_x]$ & [B,16,3] & 0 \\
+Y流输入 & $[f_y,d_y,dd_y]$ & [B,16,3] & 0 \\
+质量分支输入 & $[\mathrm{conf},\log(\mathrm{area}+1),\mathrm{miss\_flag},dt]$ & [B,16,4] & 0 \\
+每流因果卷积1 & $3\rightarrow32$, $k=3$, $d=1$ & [B,16,32] & 320 / 流 \\
+每流因果卷积2 & $32\rightarrow32$, $k=3$, $d=2$ & [B,16,32] & 3,104 / 流 \\
+每流GRU & $32\rightarrow32$ & [B,16,32] & 6,336 / 流 \\
+每流因果注意力 & dim=32, heads=4 & [B,16,32] & 4,288 / 流 \\
+质量分支编码 & Linear$(4\rightarrow16)$ + GRU$(16\rightarrow16)$ & [B,16,16] & 1,712 \\
+融合层 & Linear$(80\rightarrow64)$ + ReLU + Dropout & [B,64] & 5,184 \\
+Delta head & Linear$(64\rightarrow32\rightarrow2)$ & [B,2] & 2,146 \\
+Gate head & Linear$(64\rightarrow32\rightarrow2)$ & [B,2] & 2,146 \\
+\midrule
+\textbf{总计} & & & \textbf{39,284} \\
+\bottomrule
+\end{tabular}%
+}
+}
+\end{table}
+
+表\ref{tab:model_architecture_detail}不仅给出了最终 DSCGNet 的各子模块配置、输出形状和参数分布，也进一步说明了模型轻量化的来源。从参数构成上看，主要开销集中在双流时序编码部分以及融合输出头，两条运动分支承担了大部分时序建模能力，而质量分支仅引入较小的附加参数量；在保留 10 维输入、$T=16$ 历史窗口和状态转移参数化输出的同时，模型总参数量被控制在 39\,284。在当前实验电脑（Intel Core i7-14700KF、NVIDIA GeForce RTX 4070 Ti SUPER 16\,GB、32\,GB 内存）上，最终模型在 batch size 为 1 时的平均前向推理耗时为 GPU 1.0\,ms，对应推理频率约为 1000\,Hz 。由此可见，该结构在参数规模和运行时延上均保持了较好的平衡，适合部署于资源受限但又要求实时响应的视觉伺服反无人机系统中。
+
+\subsection{方法优势与局限性}
+本文方法的主要优势在于：(1) 直接从历史 legacy control signal 到下一帧控制信号进行端到端建模；(2) 采用双流因果卷积、GRU 和状态转移参数化输出头，在保证可部署性的同时增强单步预测稳定性；(3) 联合损失同时考虑前瞻精度、增量一致性、状态相关稳定性和方向一致性，更符合控制应用需求；(4) 严格因果操作确保可在线部署。
+
+然而，方法也存在一定局限性：(1) 预测效果依赖于训练数据的代表性，对于训练集中未见过的运动模式可能效果有限；(2) 当前仅针对一帧时延进行预测，对于更大的时延需要重新设计；(3) 本文主要验证了信号层面的前瞻性与平滑性，未来仍需要进一步量化其在完整闭环中的收益。后续工作可继续探索多步预测、质量感知建模以及更系统的闭环控制评估。
+
+\section{结论}
+本文针对视觉伺服反无人机系统中由图像采集、检测推理和后续整形链路带来的一帧级时延问题，提出了一种面向时延补偿的端到端轻量时序预测方法。该方法以旧控制链历史输出序列及其一、二阶差分特征作为输入，其中旧控制链输出由检测框中心坐标经卡尔曼滤波、相机中心差分、阶跃限幅和低通滤波后得到；在此基础上，采用轻量双流因果网络直接生成下一帧二维控制信号，从而将问题统一表述为 legacy control signal 的一帧前瞻预测。与将任务视为一般未来值预测不同，本文在损失函数中同时引入前瞻精度、增量一致性、稳定性和方向一致性约束，使模型输出更符合实际控制链的使用需求。
+
+实验结果表明，在真实视觉伺服反无人机系统数据上，所提方法在 Ahead MAE 和 Ahead RMSE 指标上均优于 Last Value、Linear Extrapolation、Kalman CV 和 GRU Direct 等对比方法，验证了该方法在下一帧控制信号预测任务中的有效性。消融实验进一步说明，历史窗口长度、质量分支和因果注意力都会对预测性能产生影响，其中 $T=16$ 的配置在精度和稳定性之间取得了较好的折中，质量分支与因果注意力的引入有助于进一步提升模型表现。整体来看，所提方法在保持轻量性与因果性的同时，具备较好的工程部署潜力。
+
+未来工作将进一步研究更长时域的多步控制信号预测、更丰富的质量特征建模以及在线学习与域自适应机制，以提升模型在复杂场景和新运动模式下的鲁棒性与泛化能力。
+
+\bibliographystyle{IEEEtran}
+\bibliography{main}
+
+\end{document}

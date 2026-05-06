@@ -1,0 +1,111 @@
+model:
+  path: "D:/kun-data/kun-code-data/run/yolo12n/weights/best.pt"
+  conf_detect: 0.65
+  tile_enable: true
+  tile_size: 960
+  tile_overlap: 0.25
+  tile_max_per_frame: 2
+  tile_global_interval: 6
+  tile_priority_enable: true
+  tile_priority_topk: 1
+  tile_priority_expand_ratio: 2.0
+  tile_priority_ttl: 8
+
+camera:
+  index: 0
+  width: 640
+  height: 480
+  center_x: 320
+  center_y: 240
+  backend: "dshow"
+  show_window: true
+  show_coasting: false
+  use_mjpg: true
+  auto_focus_enable: true
+  auto_zoom_enable: true
+  target_bbox_ratio: 0.10
+  bbox_ratio_alpha: 0.35
+  zoom_persist_frames: 3
+  zoom_step: 5.0
+  zoom_min: 0
+  zoom_max: 260
+  show_zoom_debug: false
+  zoom_area_deadband_px: 100
+  zoom_hysteresis_ratio: 1.6
+  zoom_action_interval_ms: 250
+  zoom_stable_required_ms: 0
+  zoom_median_window: 5
+  zoom_search_step: 10.0
+  zoom_search_every_n: 2
+  zoom_max_lost_recover_enable: true
+  zoom_max_lost_trigger_frames: 8
+  zoom_recover_step: 15.0
+  zoom_out_enable: false
+  zoom_out_trigger_mult: 1.8
+  zoom_hold_miss_frames: 10
+  zoom_reacquire_freeze_frames: 6
+  zoom_reacquire_confirm_frames: 3
+
+mot:
+  max_age: 15
+  iou_gate: 0.25
+  tracker_type: "bytetrack"
+  use_bytetrack: true
+  track_high_thresh: 0.6
+  track_low_thresh: 0.1
+  new_track_thresh: 0.7
+  second_match_iou: 0.15
+  botsort_iou_weight: 0.75
+  botsort_center_weight: 0.25
+  botsort_max_center_dist_ratio: 0.55
+
+control:
+  rate_hz: 30
+  deadband_px: 10
+  cmd_limit: 80
+  slew_per_tick: 8
+  pid_x: {kp: 0.06, ki: 0.0, kd: 0.0}
+  pid_y: {kp: 0.03, ki: 0.0, kd: 0.0}
+  stop_when_lost: true
+
+actuator:
+  mode: "mock"
+  armed: false
+  python_exe: "C:/Users/Administrator/miniconda3/envs/py310/python.exe"
+  bridge_script: "tools/motor_usb_bridge.py"
+  x_vendor_id: 1155
+  x_product_id: 22288
+  y_vendor_id: 1156
+  y_product_id: 22289
+  invert_x: false
+  invert_y: false
+  scale_x: 1.0
+  scale_y: 1.0
+  speed_limit: 80
+  send_zero_on_close: true
+  debug: false
+
+filter:
+  enable: true
+  neural_enable: false
+  meas_only_when_matched: true
+  switch_prob: 0.04
+  gate_chi2: 9.21
+  huber_c: 2.5
+  q_pos: 180.0
+  q_vel: 80.0
+  q_acc: 25.0
+  r_pos: 144.0
+  alpha_q_min: 0.35
+  alpha_q_max: 3.00
+  alpha_r_min: 0.35
+  alpha_r_max: 4.50
+  bias_limit_px: 4.0
+  outlier_prob_min: 0.05
+  outlier_prob_max: 0.95
+
+log:
+  enable: true
+  path: "outputs/training_full/tracker_log.csv"
+  dedup_by_frame_id: true
+  profile: "full"

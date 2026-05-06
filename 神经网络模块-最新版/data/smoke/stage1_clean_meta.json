@@ -1,0 +1,45 @@
+{
+  "seq_len": 8,
+  "stride": 1,
+  "feature_columns": [
+    "dx_raw",
+    "dy_raw",
+    "d1_dx",
+    "d1_dy",
+    "d2_dx",
+    "d2_dy",
+    "trend_dx",
+    "trend_dy",
+    "trend_vx",
+    "trend_vy",
+    "det_conf",
+    "bbox_area_norm",
+    "lost_flag",
+    "is_meas_update",
+    "meas_age_ms",
+    "zoom_value",
+    "zoom_delta",
+    "dt_ms",
+    "switch_score",
+    "turn_score",
+    "vision_latency_ms",
+    "algorithm_latency_ms",
+    "control_latency_ms",
+    "actuation_latency_ms",
+    "total_horizon_ms"
+  ],
+  "train_runs": [
+    "run_1774677261784"
+  ],
+  "val_runs": [
+    "run_1774677261784"
+  ],
+  "test_runs": [
+    "run_1774677261784"
+  ],
+  "input_csv": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\logs\\tracker_log.csv",
+  "algorithm_latency_ms": 8.0,
+  "control_latency_ms": 16.0,
+  "actuation_latency_ms": 20.0,
+  "sample_count": 9
+}

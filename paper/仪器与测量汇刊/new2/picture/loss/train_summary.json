@@ -1,0 +1,58 @@
+{
+  "loss_csv": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\paper\\仪器与测量汇刊\\new2\\picture\\loss\\loss.csv",
+  "precision_csv": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\paper\\仪器与测量汇刊\\new2\\picture\\Precision\\precisiion.csv",
+  "checkpoint": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\paper\\仪器与测量汇刊\\new2\\picture\\loss\\dscgnet_best.pt",
+  "plot_script": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\paper\\仪器与测量汇刊\\new2\\picture\\loss\\plot_loss.py",
+  "precision_plot_script": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\paper\\仪器与测量汇刊\\new2\\picture\\Precision\\plot_precision.py",
+  "device": "cuda",
+  "best_epoch": 112,
+  "best_val_ahead_mae": 0.9714972972869873,
+  "best_val_ahead_rmse": 12.911847114562988,
+  "best_precision": 0.9565217391304348,
+  "best_precision_epoch": 382,
+  "history_rows": 500,
+  "train_config": {
+    "raw_csv": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\data\\track-fusion-move_2026-4-17_new.csv",
+    "split_ref_csv": "D:\\kun-data\\kun-code-data\\反无\\cpp智能控制\\data\\train\\track-fusion-move_2026-4-17_new_dscgnet_predictions.csv",
+    "device": "auto",
+    "seed": 42,
+    "epochs": 500,
+    "batch_size": 64,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "hidden": 32,
+    "rmax_x": 12.0,
+    "rmax_y": 12.0,
+    "lambda_ahead": 1.0,
+    "lambda_inc": 0.5,
+    "lambda_stab": 0.1,
+    "lambda_dir": 0.1,
+    "lambda_gate": 0.01,
+    "tau": 12.0,
+    "spike_threshold": 5.0,
+    "num_workers": 0
+  },
+  "experiment_config": {
+    "name": "full",
+    "display_name": "T=16 + quality + attention",
+    "history_len": 16,
+    "use_quality": true,
+    "use_attention": true,
+    "output_head": "state",
+    "params": 37532
+  },
+  "split_ranges": {
+    "train": [
+      15,
+      2377
+    ],
+    "val": [
+      2378,
+      2883
+    ],
+    "test": [
+      2884,
+      3391
+    ]
+  }
+}

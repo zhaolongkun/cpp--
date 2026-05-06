@@ -1,0 +1,8 @@
+﻿第一步：进入项目目录
+Set-Location 'D:\kun-data\kun-code-data\反无\cpp智能控制'
+
+第二步：设置运行环境
+$env:PATH='C:\Users\Administrator\miniconda3\envs\py310\Library\bin;' + $env:PATH
+
+第三步：运行项目
+.\build\msvc-opencv-release\tracker.exe --mode cam --config .\config\tracker.yaml

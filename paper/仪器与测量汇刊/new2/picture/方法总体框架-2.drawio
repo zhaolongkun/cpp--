@@ -1,0 +1,76 @@
+<mxfile host="65bd71144e">
+    <diagram id="fw2" name="End-to-End Framework">
+        <mxGraphModel dx="1755" dy="1126" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="800" background="#FFFFFF" math="1" shadow="1">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="t0" value="Legacy Control Signal Generation and End-to-End One-Frame-Ahead Prediction Framework" style="text;strokeColor=none;fillColor=none;html=1;fontSize=14;fontStyle=1;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="236" y="141" width="1600" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="det" value="Object Detection&lt;div&gt;Bounding box center&lt;/div&gt;&lt;div&gt;c(t)=[x_c, y_c]&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="232" y="429" width="140" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="kalman" value="Kalman Filter&lt;div&gt;Filter bbox coordinates&lt;/div&gt;&lt;div&gt;→ ĉ(t), v̂(t)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+                    <mxGeometry x="395" y="429" width="150" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="a1" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="det" target="kalman" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="sub" value="Subtract Camera Center&lt;div&gt;e_f(t) = ĉ(t) − c_cam&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="568" y="429" width="155" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="a2" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="kalman" target="sub" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="clamp" value="Step Clamp&lt;div&gt;→ ẽ(t)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="745" y="429" width="120" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="a3" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="sub" target="clamp" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="lpf" value="Low-Pass Filter&lt;div&gt;u_legacy(t)&lt;/div&gt;&lt;div&gt;[first_filter_dx/dy]&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="889" y="429" width="150" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="a4" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="clamp" target="lpf" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="feat" value="Feature Construction (T=16)&lt;div&gt;X-stream: [fx, Δfx, Δ²fx]&lt;/div&gt;&lt;div&gt;Y-stream: [fy, Δfy, Δ²fy]&lt;/div&gt;&lt;div&gt;Quality: [conf, logA, miss, dt]&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="883.5" y="239.5" width="165" height="115" as="geometry"/>
+                </mxCell>
+                <mxCell id="a5" value="history" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" source="lpf" target="feat" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="net" value="DSCGNet&lt;div&gt;Dual-stream causal encoder + Quality branch&lt;/div&gt;&lt;div&gt;Δ-head (z_t)  +  Gate-head (g_t)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#555555;fontStyle=1;strokeWidth=2;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="1082" y="262" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="a6" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="feat" target="net" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="trans" value="State Transition Output&lt;div&gt;Δû = g_t ⊙ (r_max ⊙ tanh(z_t))&lt;/div&gt;&lt;div&gt;û_{t+1} = u_legacy(t) + Δû&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0cee2;strokeColor=#56517e;" parent="1" vertex="1">
+                    <mxGeometry x="1348" y="257" width="210" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="a7" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="net" target="trans" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a8" value="u_legacy(t)" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#b85450;fontColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" source="lpf" target="trans" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="out" value="Predicted Output û_{t+1}&lt;div&gt;(pred_ux, pred_uy)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1597" y="267" width="150" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="a9" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="trans" target="out" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="motor" value="Motor Control&lt;div&gt;Pan-tilt drive&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="1612" y="411" width="120" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="a10" value="" style="edgeStyle=orthogonalEdgeStyle;" parent="1" source="out" target="motor" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="dn" value="⚠ ~1-frame visual processing delay" style="text;strokeColor=#d6b656;fillColor=#fff2cc;html=1;fontSize=8;rounded=1;" parent="1" vertex="1">
+                    <mxGeometry x="232" y="340" width="180" height="26" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

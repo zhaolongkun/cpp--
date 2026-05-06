@@ -1,0 +1,75 @@
+{
+  "csv_path": "D:\\kun-data\\kun-code-data\\\u53cd\u65e0\\cpp\u667a\u80fd\u63a7\u5236\\data\\track-fusion-move.csv",
+  "signal_columns": [
+    "window8_10_no.3_first_filter_x",
+    "window8_10_no.3_first_filter_y"
+  ],
+  "segment_count": 1,
+  "segment_meta": [
+    {
+      "segment_index": 0,
+      "raw_len": 1238,
+      "seq_count": 1230
+    }
+  ],
+  "sequence_shape": {
+    "X": [
+      1230,
+      8,
+      4
+    ],
+    "Y": [
+      1230,
+      2
+    ]
+  },
+  "train_size": 861,
+  "val_size": 184,
+  "test_size": 185,
+  "stats": {
+    "mean": [
+      -71.746337890625,
+      -19.357526779174805,
+      -0.008950927294790745,
+      0.0150225218385458
+    ],
+    "std": [
+      0.6697690486907959,
+      1.006037950515747,
+      0.1644056886434555,
+      0.17975671589374542
+    ]
+  },
+  "test_metrics": {
+    "huber": 0.002661422418896109,
+    "mae": 0.05664999037981033,
+    "rmse": 0.07690735161304474
+  },
+  "artifacts": {
+    "pth": "D:\\kun-data\\kun-code-data\\\u53cd\u65e0\\cpp\u667a\u80fd\u63a7\u5236\\\u6a21\u578b-new2\\smoke_checkpoints\\causal_cnn_gru.pth",
+    "onnx": "D:\\kun-data\\kun-code-data\\\u53cd\u65e0\\cpp\u667a\u80fd\u63a7\u5236\\\u6a21\u578b-new2\\smoke_checkpoints\\causal_cnn_gru.onnx",
+    "stats": "D:\\kun-data\\kun-code-data\\\u53cd\u65e0\\cpp\u667a\u80fd\u63a7\u5236\\\u6a21\u578b-new2\\smoke_checkpoints\\stats.json",
+    "history": "D:\\kun-data\\kun-code-data\\\u53cd\u65e0\\cpp\u667a\u80fd\u63a7\u5236\\\u6a21\u578b-new2\\smoke_checkpoints\\train_history.json",
+    "npz": "D:\\kun-data\\kun-code-data\\\u53cd\u65e0\\cpp\u667a\u80fd\u63a7\u5236\\\u6a21\u578b-new2\\smoke_checkpoints\\data.npz"
+  },
+  "args": {
+    "csv_path": "../data/track-fusion-move.csv",
+    "signal_x_col": "window8_10_no.3_first_filter_x",
+    "signal_y_col": "window8_10_no.3_first_filter_y",
+    "frame_col": "frame_id",
+    "track_col": "track_id",
+    "history_len": 8,
+    "window_size": 1,
+    "epochs": 1,
+    "batch_size": 128,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "patience": 1,
+    "seed": 42,
+    "hidden_dim": 64,
+    "min_segment_len": 12,
+    "keep_frame": "last",
+    "opset": 14,
+    "output_dir": "smoke_checkpoints"
+  }
+}
